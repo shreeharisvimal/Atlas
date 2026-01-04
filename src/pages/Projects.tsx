@@ -20,6 +20,7 @@ export const Projects = () => {
     name: '',
     description: '',
     key: '',
+    site_link: '',
   });
   const [errors, setErrors] = useState<{ name?: string; key?: string }>({});
 
@@ -75,10 +76,11 @@ export const Projects = () => {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
         key: formData.key.trim().toUpperCase(),
+        site_link: formData.site_link?.trim() || null,
       });
       showToast('Project created successfully', 'success');
       setShowCreateModal(false);
-      setFormData({ name: '', description: '', key: '' });
+      setFormData({ name: '', description: '', key: '', site_link: '' });
       setErrors({});
       loadProjects();
     } catch (error: any) {
@@ -93,6 +95,7 @@ export const Projects = () => {
       name: project.name,
       description: project.description || '',
       key: project.key,
+      site_link: project.site_link || '',
     });
     setErrors({});
     setShowEditModal(true);
@@ -106,13 +109,14 @@ export const Projects = () => {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
         key: formData.key.trim().toUpperCase(),
+        site_link: formData.site_link?.trim() || null,
         is_active: editingProject.is_active,
       };
       await projectsApi.updateProject(editingProject.id, updateData);
       showToast('Project updated successfully', 'success');
       setShowEditModal(false);
       setEditingProject(null);
-      setFormData({ name: '', description: '', key: '' });
+      setFormData({ name: '', description: '', key: '', site_link: '' });
       setErrors({});
       loadProjects();
     } catch (error: any) {
@@ -208,6 +212,22 @@ export const Projects = () => {
                       <div className="text-sm text-gray-500 dark:text-gray-400 max-w-md truncate">
                         {project.description || '-'}
                       </div>
+                      {project.site_link && (
+                        <div className="mt-1">
+                          <a
+                            href={project.site_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            View Website
+                          </a>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -307,6 +327,21 @@ export const Projects = () => {
                     maxLength={500}
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Site Link
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.site_link || ''}
+                    onChange={(e) => setFormData({ ...formData, site_link: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="https://example.com"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Website URL for this project (optional)
+                  </p>
+                </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">
                 <button
@@ -381,6 +416,21 @@ export const Projects = () => {
                     rows={3}
                     maxLength={500}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Site Link
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.site_link || ''}
+                    onChange={(e) => setFormData({ ...formData, site_link: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="https://example.com"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Website URL for this project (optional)
+                  </p>
                 </div>
                 <div>
                   <label className="flex items-center gap-2">

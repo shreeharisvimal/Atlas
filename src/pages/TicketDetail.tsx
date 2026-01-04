@@ -30,6 +30,7 @@ export const TicketDetail = () => {
   const [editData, setEditData] = useState({
     title: '',
     description: '',
+    page_url: '',
     status: '' as TicketStatus,
     priority: '' as Priority,
     issue_type: '' as IssueType,
@@ -64,6 +65,7 @@ export const TicketDetail = () => {
       setEditData({
         title: data.title,
         description: data.description,
+        page_url: data.page_url || '',
         status: data.status,
         priority: data.priority,
         issue_type: data.issue_type,
@@ -143,6 +145,7 @@ export const TicketDetail = () => {
       const updated = await ticketsApi.updateTicket(parseInt(id), {
         title: editData.title,
         description: editData.description,
+        page_url: editData.page_url || null,
         priority: editData.priority,
         issue_type: editData.issue_type,
         assigned_to_id: editData.assigned_to_id,
@@ -477,6 +480,7 @@ export const TicketDetail = () => {
                     setEditData({
                       title: ticket.title,
                       description: ticket.description,
+                      page_url: ticket.page_url || '',
                       status: ticket.status,
                       priority: ticket.priority,
                       issue_type: ticket.issue_type,
@@ -537,12 +541,42 @@ export const TicketDetail = () => {
                     placeholder="Enter ticket description..."
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Page URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={editData.page_url}
+                    onChange={(e) => setEditData({ ...editData, page_url: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="https://example.com/page"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Exact URL of the page where this issue occurs
+                  </p>
+                </div>
               </>
             ) : (
               <>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
                   {ticket.title}
                 </h2>
+                {ticket.page_url && (
+                  <div className="mb-4">
+                    <a
+                      href={ticket.page_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      View Page
+                    </a>
+                  </div>
+                )}
                 <div className="prose dark:prose-invert max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {ticket.description || '*No description provided*'}

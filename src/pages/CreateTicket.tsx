@@ -18,6 +18,7 @@ export const CreateTicket = () => {
   const { user: currentUser } = useAuthStore();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [pageUrl, setPageUrl] = useState('');
   const [issueType, setIssueType] = useState<IssueType>(IssueType.BUG);
   const [priority, setPriority] = useState<Priority>(Priority.MEDIUM);
   const [assignedToId, setAssignedToId] = useState<number | null>(null);
@@ -190,6 +191,7 @@ export const CreateTicket = () => {
       const ticketData: TicketCreate = {
         title: title.trim(),
         description: description.trim(),
+        page_url: pageUrl.trim() || null,
         issue_type: issueType,
         priority: priority,
         assigned_to_id: assignedToId,
@@ -289,6 +291,22 @@ export const CreateTicket = () => {
           {errors.description && (
             <p className="mt-1 text-sm text-red-600">{errors.description}</p>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Page URL (Optional)
+            </label>
+            <input
+              type="url"
+              value={pageUrl}
+              onChange={(e) => setPageUrl(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="https://example.com/page"
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Exact URL of the page where this issue occurs
+            </p>
+          </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

@@ -170,8 +170,11 @@ export const ActiveSprints = () => {
       return true;
     }
 
-    // Only assigned user can update status (except for TEAM_LEAD and PROJECT_MANAGER)
-    if (!isAssignedUser) {
+    // Testers/QA can move tickets from IN_TESTING regardless of assignment (they check and decide)
+    if (currentStatus === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA)) {
+      // Testers can move tickets from IN_TESTING to any status - handled below
+    } else if (!isAssignedUser) {
+      // Only assigned user can update status (except for TEAM_LEAD, PROJECT_MANAGER, and TESTER/QA when moving from IN_TESTING)
       return false;
     }
 
@@ -188,15 +191,21 @@ export const ActiveSprints = () => {
       return allowedTransitions[currentStatus]?.includes(newStatus) || false;
     }
 
-    // TESTER and QA workflow - can change TESTING status and move to DONE
+    // TESTER and QA workflow - can change TESTING status to ANY status (they check and decide)
     if (user.designation === Designation.TESTER || user.designation === Designation.QA) {
-      const allowedTransitions: Record<TicketStatus, TicketStatus[]> = {
+      // Testers can move tickets from IN_TESTING to ANY status (they are the ones who check and decide)
+      if (currentStatus === TicketStatus.IN_TESTING) {
+        return true; // Allow transition to any status from IN_TESTING
+      }
+      
+      // Other allowed transitions for testers
+      const allowedTransitions: Partial<Record<TicketStatus, TicketStatus[]>> = {
         [TicketStatus.REVIEW]: [TicketStatus.IN_TESTING],
-        [TicketStatus.IN_TESTING]: [TicketStatus.DONE, TicketStatus.REVIEW, TicketStatus.IN_PROGRESS], // Can move to DONE, back to REVIEW, or back to IN_PROGRESS
         [TicketStatus.DONE]: [TicketStatus.REVIEW, TicketStatus.IN_TESTING], // Can reopen
         [TicketStatus.OPEN]: [],
         [TicketStatus.IN_PROGRESS]: [],
         [TicketStatus.BLOCKED]: [],
+        [TicketStatus.IN_TESTING]: [], // Already handled above, but needed for type completeness
       };
       return allowedTransitions[currentStatus]?.includes(newStatus) || false;
     }
@@ -257,13 +266,15 @@ export const ActiveSprints = () => {
       return;
     }
     
-    // Check if user can modify this ticket (assigned user, admin, manager, or team lead)
+    // Check if user can modify this ticket
+    // Testers/QA can drag tickets from IN_TESTING (they check and decide)
     const canModify = 
       user.system_role === SystemRole.ADMIN || 
       user.system_role === SystemRole.MANAGER ||
       ticket.assigned_to_id === user.id ||
       user.designation === Designation.TEAM_LEAD ||
-      user.designation === Designation.PROJECT_MANAGER;
+      user.designation === Designation.PROJECT_MANAGER ||
+      (ticket.status === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA));
     
     if (!canModify) {
       e.preventDefault();
@@ -621,7 +632,7 @@ export const ActiveSprints = () => {
                     {columnTickets.map((ticket) => (
                       <div
                         key={ticket.id}
-                        draggable={!movingTicket && !!user && (user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER)}
+                        draggable={!movingTicket && !!user && (user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER || (ticket.status === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA)))}
                         onDragStart={(e) => handleDragStart(e, ticket)}
                         onDragEnd={handleDragEnd}
                         className={`group bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 p-4 shadow-md hover:shadow-xl hover:border-primary-300 dark:hover:border-primary-600 transition-all duration-300 mb-3 relative overflow-hidden transform-gpu ${
@@ -629,11 +640,11 @@ export const ActiveSprints = () => {
                         } ${
                           draggedTicket === ticket.id ? 'opacity-30 scale-90 rotate-3 shadow-2xl z-50 border-primary-400' : ''
                         } ${
-                          user && (user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER) 
+                          user && (user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER || (ticket.status === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA))) 
                             ? 'cursor-move hover:scale-[1.02] hover:-translate-y-1 active:scale-100' 
                             : 'cursor-pointer hover:scale-[1.01]'
                         } ${
-                          !user || !(user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER)
+                          !user || !(user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER || (ticket.status === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA)))
                             ? 'opacity-90'
                             : ''
                         }`}
@@ -658,7 +669,7 @@ export const ActiveSprints = () => {
 
                         <div className="relative z-10">
                           {/* Drag Handle Indicator */}
-                          {user && (user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER) && (
+                          {user && (user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER || (ticket.status === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA))) && (
                             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-20">
                               <div className="bg-primary-100 dark:bg-primary-900/50 rounded-md p-1.5 shadow-sm border border-primary-200 dark:border-primary-800">
                                 <div className="flex gap-0.5">
@@ -678,7 +689,7 @@ export const ActiveSprints = () => {
                             </div>
                           )}
                           {/* Non-draggable indicator */}
-                          {user && !(user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER) && (
+                          {user && !(user.system_role === SystemRole.ADMIN || user.system_role === SystemRole.MANAGER || ticket.assigned_to_id === user.id || user.designation === Designation.TEAM_LEAD || user.designation === Designation.PROJECT_MANAGER || (ticket.status === TicketStatus.IN_TESTING && (user.designation === Designation.TESTER || user.designation === Designation.QA))) && (
                             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                               <div className="bg-gray-100 dark:bg-gray-700 rounded-md p-1.5 shadow-sm border border-gray-300 dark:border-gray-600">
                                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

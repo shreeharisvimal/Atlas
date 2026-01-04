@@ -61,6 +61,7 @@ export interface Ticket {
   id: number;
   title: string;
   description: string;
+  page_url: string | null;
   issue_type: IssueType;
   priority: Priority;
   status: TicketStatus;
@@ -115,6 +116,7 @@ export interface Project {
   name: string;
   description: string | null;
   key: string;
+  site_link: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -137,6 +139,7 @@ export interface Sprint {
 export interface TicketCreate {
   title: string;
   description: string;
+  page_url?: string | null;
   issue_type: IssueType;
   priority: Priority;
   assigned_to_id?: number | null;
@@ -147,6 +150,7 @@ export interface TicketCreate {
 export interface TicketUpdate {
   title?: string;
   description?: string;
+  page_url?: string | null;
   issue_type?: IssueType;
   priority?: Priority;
   assigned_to_id?: number | null;

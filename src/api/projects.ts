@@ -5,12 +5,14 @@ export interface ProjectCreate {
   name: string;
   description?: string | null;
   key: string;
+  site_link?: string | null;
 }
 
 export interface ProjectUpdate {
   name?: string;
   description?: string | null;
   key?: string;
+  site_link?: string | null;
   is_active?: boolean;
 }
 

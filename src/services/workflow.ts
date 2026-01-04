@@ -18,8 +18,11 @@ export class WorkflowService {
       return true;
     }
 
-    // Only assigned user can update status (except for TEAM_LEAD and PROJECT_MANAGER)
-    if (!isAssignedUser && userDesignation !== Designation.TEAM_LEAD && userDesignation !== Designation.PROJECT_MANAGER) {
+    // Only assigned user can update status (except for TEAM_LEAD, PROJECT_MANAGER, and TESTER/QA when moving from IN_TESTING)
+    // Testers/QA can move tickets from IN_TESTING regardless of assignment (they check and decide)
+    if (currentStatus === TicketStatus.IN_TESTING && (userDesignation === Designation.TESTER || userDesignation === Designation.QA)) {
+      // Testers can move tickets from IN_TESTING to any status - handled below
+    } else if (!isAssignedUser && userDesignation !== Designation.TEAM_LEAD && userDesignation !== Designation.PROJECT_MANAGER) {
       return false;
     }
 
@@ -41,12 +44,17 @@ export class WorkflowService {
       return allowedTransitions[currentStatus]?.includes(newStatus) || false;
     }
 
-    // TESTER and QA workflow
+    // TESTER and QA workflow - can change TESTING status to ANY status (they check and decide)
     if (userDesignation === Designation.TESTER || userDesignation === Designation.QA) {
+      // Testers can move tickets from IN_TESTING to ANY status (they are the ones who check and decide)
+      if (currentStatus === TicketStatus.IN_TESTING) {
+        return true; // Allow transition to any status from IN_TESTING
+      }
+      
+      // Other allowed transitions for testers
       const allowedTransitions: Record<TicketStatus, TicketStatus[]> = {
         [TicketStatus.REVIEW]: [TicketStatus.IN_TESTING],
-        [TicketStatus.IN_TESTING]: [TicketStatus.DONE, TicketStatus.REVIEW],
-        [TicketStatus.DONE]: [TicketStatus.REVIEW],
+        [TicketStatus.DONE]: [TicketStatus.REVIEW, TicketStatus.IN_TESTING], // Can reopen
         [TicketStatus.OPEN]: [],
         [TicketStatus.IN_PROGRESS]: [],
         [TicketStatus.BLOCKED]: [],

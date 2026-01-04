@@ -52,12 +52,13 @@ export class WorkflowService {
       }
       
       // Other allowed transitions for testers
-      const allowedTransitions: Record<TicketStatus, TicketStatus[]> = {
+      const allowedTransitions: Partial<Record<TicketStatus, TicketStatus[]>> = {
         [TicketStatus.REVIEW]: [TicketStatus.IN_TESTING],
         [TicketStatus.DONE]: [TicketStatus.REVIEW, TicketStatus.IN_TESTING], // Can reopen
         [TicketStatus.OPEN]: [],
         [TicketStatus.IN_PROGRESS]: [],
         [TicketStatus.BLOCKED]: [],
+        [TicketStatus.IN_TESTING]: [], // Already handled above, but needed for type completeness
       };
       return allowedTransitions[currentStatus]?.includes(newStatus) || false;
     }

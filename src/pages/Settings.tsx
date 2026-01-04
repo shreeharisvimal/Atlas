@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { userPreferencesApi } from '../api/userPreferences';
-import { useAuthStore } from '../store/auth';
 import { useToastStore } from '../store/toast';
 import { useThemeStore } from '../store/theme';
 import type { UserPreference } from '../types';
 
 export const Settings = () => {
-  const { user } = useAuthStore();
   const { showToast } = useToastStore();
   const { theme, setTheme } = useThemeStore();
   const [preferences, setPreferences] = useState<UserPreference | null>(null);
@@ -37,7 +35,7 @@ export const Settings = () => {
     try {
       const data = await userPreferencesApi.getPreferences();
       setPreferences(data);
-      setLocalTheme(data.theme || 'system');
+      setLocalTheme((data.theme || 'system') as 'light' | 'dark' | 'system');
       setEmailNotifications(data.email_notifications ?? true);
       setInAppNotifications(data.in_app_notifications ?? true);
       setNotificationsEnabled(data.email_notifications && data.in_app_notifications);
@@ -129,7 +127,7 @@ export const Settings = () => {
   }) => (
     <button
       type="button"
-      onClick={() => setLocalTheme(value)}
+      onClick={() => setLocalTheme(value as 'light' | 'dark' | 'system')}
       className={`relative flex flex-col items-center p-6 rounded-2xl border-2 transition-all duration-300 ${
         selected
           ? 'border-primary-500 bg-gradient-to-br from-primary-50 to-primary-100/50 dark:from-primary-900/20 dark:to-primary-800/10 shadow-lg shadow-primary-500/20 scale-105'

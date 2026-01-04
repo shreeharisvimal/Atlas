@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/auth';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { WorkflowService } from '../services/workflow';
 import type { Project, Ticket } from '../types';
-import { SystemRole, TicketStatus, Priority } from '../types';
+import { TicketStatus, Priority } from '../types';
 
 export const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();

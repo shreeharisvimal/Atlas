@@ -58,7 +58,7 @@ export class WorkflowService {
   }
 
   static canUpdateStatus(
-    currentStatus: TicketStatus,
+    _currentStatus: TicketStatus,
     userDesignation: Designation,
     userRole: SystemRole,
     isAssignedUser: boolean

@@ -33,7 +33,6 @@ export const ActiveSprints = () => {
   const [movingTicket, setMovingTicket] = useState<number | null>(null);
   const [draggedTicket, setDraggedTicket] = useState<number | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TicketStatus | null>(null);
-  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [invalidDropZone, setInvalidDropZone] = useState<TicketStatus | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -172,7 +171,7 @@ export const ActiveSprints = () => {
     }
 
     // Only assigned user can update status (except for TEAM_LEAD and PROJECT_MANAGER)
-    if (!isAssignedUser && user.designation !== Designation.TEAM_LEAD && user.designation !== Designation.PROJECT_MANAGER) {
+    if (!isAssignedUser) {
       return false;
     }
 
@@ -285,20 +284,17 @@ export const ActiveSprints = () => {
     e.dataTransfer.setData('application/json', JSON.stringify({ ticketId: ticket.id, currentStatus: ticket.status }));
     e.dataTransfer.setData('text/plain', ticket.id.toString());
     setDraggedTicket(ticket.id);
-    setDragPosition({ x: e.clientX, y: e.clientY });
   };
 
-  const handleDragEnd = (e: React.DragEvent) => {
+  const handleDragEnd = (_e: React.DragEvent) => {
     setDraggedTicket(null);
     setDragOverColumn(null);
-    setDragPosition(null);
     setInvalidDropZone(null);
   };
 
   const handleDragOver = (e: React.DragEvent, columnStatus: TicketStatus) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragPosition({ x: e.clientX, y: e.clientY });
     
     if (!draggedTicket) {
       e.dataTransfer.dropEffect = 'none';

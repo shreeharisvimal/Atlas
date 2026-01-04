@@ -5,20 +5,18 @@ import { commentsApi } from '../api/comments';
 import { ticketHistoryApi } from '../api/ticketHistory';
 import { attachmentsApi } from '../api/attachments';
 import { useToastStore } from '../store/toast';
-import { useAuthStore } from '../store/auth';
-import { LoadingSpinner, TicketDetailSkeleton } from '../components/LoadingSpinner';
+import { TicketDetailSkeleton } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import { MarkdownEditor } from '../components/MarkdownEditor';
 import { AttachmentUpload } from '../components/AttachmentUpload';
 import type { Ticket, Comment, TicketHistory, TicketStatus, Priority, IssueType, User, Attachment } from '../types';
-import { format, isSameDay, startOfDay } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 export const TicketDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user: currentUser } = useAuthStore();
   const { showToast } = useToastStore();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -117,11 +115,10 @@ export const TicketDetail = () => {
 
   const loadDropdowns = async () => {
     try {
-      const [statusesData, prioritiesData, typesData, usersData] = await Promise.all([
+      const [statusesData, prioritiesData, typesData] = await Promise.all([
         ticketsApi.getStatuses(),
         ticketsApi.getPriorities(),
         ticketsApi.getIssueTypes(),
-        ticketsApi.getTickets({ limit: 1 }).then(() => []), // We'll need a users API call
       ]);
       setStatuses(statusesData);
       setPriorities(prioritiesData);
@@ -146,7 +143,6 @@ export const TicketDetail = () => {
       const updated = await ticketsApi.updateTicket(parseInt(id), {
         title: editData.title,
         description: editData.description,
-        status: editData.status,
         priority: editData.priority,
         issue_type: editData.issue_type,
         assigned_to_id: editData.assigned_to_id,

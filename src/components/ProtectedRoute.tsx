@@ -12,10 +12,6 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Check both token and user to ensure proper authentication
-    const token = localStorage.getItem('access_token');
-    const hasAuth = !!(token && user);
-    
     // Small delay to ensure auth state is loaded
     const timer = setTimeout(() => {
       setIsChecking(false);

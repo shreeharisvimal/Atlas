@@ -65,13 +65,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     navigate('/login');
   };
 
-  const isActive = (path: string) => {
-    if (path === '/dashboard') {
-      return location.pathname === '/' || location.pathname === '/dashboard';
-    }
-    return location.pathname.startsWith(path);
-  };
-
   const canManageUsers = user?.system_role === SystemRole.ADMIN || user?.system_role === SystemRole.MANAGER;
 
   const [showThemeMenu, setShowThemeMenu] = useState(false);

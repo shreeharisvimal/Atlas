@@ -323,7 +323,7 @@ export const Dashboard = () => {
                 <span>Tickets by Status</span>
               </h3>
               <div className="space-y-4">
-                {Object.entries(analytics.status_counts).map(([status, count], index) => (
+                {Object.entries(analytics.status_counts).map(([status, count]) => (
                   <ProgressBar
                     key={status}
                     label={status.replace('_', ' ')}
@@ -344,7 +344,7 @@ export const Dashboard = () => {
                 <span>Tickets by Priority</span>
               </h3>
               <div className="space-y-4">
-                {Object.entries(analytics.priority_counts).map(([priority, count], index) => (
+                {Object.entries(analytics.priority_counts).map(([priority, count]) => (
                   <ProgressBar
                     key={priority}
                     label={priority}

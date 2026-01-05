@@ -13,30 +13,27 @@ window.addEventListener('error', (event) => {
     event.filename?.includes('extension://') ||
     event.filename?.includes('chrome-extension://')
   ) {
-    event.preventDefault();
-    return false;
+    event.preventDefault()
+    return false
   }
-});
+})
 
 // Suppress unhandled promise rejections from browser extensions
 window.addEventListener('unhandledrejection', (event) => {
-  const errorMessage = event.reason?.message || event.reason?.toString() || '';
+  const errorMessage = event.reason?.message || event.reason?.toString() || ''
   if (
     errorMessage.includes('Could not establish connection') ||
     errorMessage.includes('Receiving end does not exist') ||
     errorMessage.includes('Extension context invalidated')
   ) {
-    event.preventDefault();
-    return false;
+    event.preventDefault()
+    return false
   }
-});
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>,
+  </React.StrictMode>
 )
-
-
-
 

@@ -17,14 +17,10 @@ const getInitials = (name: string) => {
     .slice(0, 2);
 };
 
+import { getProfilePictureUrl as getProfilePictureUrlUtil } from '../utils/urls';
+
 const getProfilePictureUrl = (profilePictureUrl?: string | null): string | null => {
-  if (!profilePictureUrl) return null;
-  const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8765';
-  // If it's already a full URL, return as is, otherwise prepend API base URL
-  if (profilePictureUrl.startsWith('http')) {
-    return profilePictureUrl;
-  }
-  return `${API_BASE_URL}${profilePictureUrl}`;
+  return getProfilePictureUrlUtil(profilePictureUrl);
 };
 
 const sizeClasses = {

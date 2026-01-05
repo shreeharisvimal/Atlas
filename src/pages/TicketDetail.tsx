@@ -4,6 +4,7 @@ import { ticketsApi } from '../api/tickets';
 import { commentsApi } from '../api/comments';
 import { ticketHistoryApi } from '../api/ticketHistory';
 import { attachmentsApi } from '../api/attachments';
+import { usersApi } from '../api/users';
 import { useToastStore } from '../store/toast';
 import { TicketDetailSkeleton } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
@@ -127,7 +128,6 @@ export const TicketDetail = () => {
       setIssueTypes(typesData);
       // Load users separately
       try {
-        const { usersApi } = await import('../api/users');
         const usersList = await usersApi.getUsersDropdown();
         setUsers(usersList);
       } catch (error) {

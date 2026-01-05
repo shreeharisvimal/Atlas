@@ -1,0 +1,24 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo Icon - Modern Atlas/Globe Symbol -->
+  <!-- Outer circle with gradient -->
+  <circle cx="24" cy="24" r="20" fill="url(#gradient1)" opacity="0.1"/>
+  <circle cx="24" cy="24" r="18" fill="url(#gradient1)"/>
+  
+  <!-- Inner design - Atlas/Globe lines -->
+  <path d="M24 6C24 6 18 10 18 14C18 18 20 20 24 20C28 20 30 18 30 14C30 10 24 6 24 6Z" fill="white" opacity="0.9"/>
+  <path d="M24 28C24 28 18 32 18 36C18 40 20 42 24 42C28 42 30 40 30 36C30 32 24 28 24 28Z" fill="white" opacity="0.9"/>
+  <ellipse cx="24" cy="24" rx="12" ry="6" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/>
+  <ellipse cx="24" cy="24" rx="6" ry="12" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/>
+  
+  <!-- Center point -->
+  <circle cx="24" cy="24" r="2" fill="white"/>
+  
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563EB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E40AF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>
+

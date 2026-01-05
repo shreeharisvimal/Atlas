@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '../store/auth';
 import { useToastStore } from '../store/toast';
 import { authApi } from '../api/auth';
 import { Avatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { extractErrorMessage } from '../utils/errorHandler';
 import type { User } from '../types';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -20,6 +21,11 @@ export const Profile = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadProfile();
@@ -60,7 +66,7 @@ export const Profile = () => {
       showToast('Profile updated successfully', 'success');
     } catch (error: any) {
       console.error('Failed to update profile:', error);
-      showToast(error.response?.data?.detail || error.message || 'Failed to update profile', 'error');
+      showToast(extractErrorMessage(error, 'Failed to update profile'), 'error');
     } finally {
       setLoading(false);
     }
@@ -74,14 +80,78 @@ export const Profile = () => {
     setEditing(false);
   };
 
-  const handlePasswordChange = async () => {
-    if (newPassword !== confirmPassword) {
-      showToast('New passwords do not match', 'error');
+  const handlePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      showToast('Please select a valid image file (JPEG, PNG, GIF, or WebP)', 'error');
       return;
     }
 
-    if (newPassword.length < 8) {
-      showToast('Password must be at least 8 characters long', 'error');
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      showToast('Image size must be less than 5MB', 'error');
+      return;
+    }
+
+    try {
+      setUploadingPicture(true);
+      const updated = await authApi.uploadProfilePicture(file);
+      setUserState(updated);
+      setUser(updated);
+      showToast('Profile picture updated successfully', 'success');
+    } catch (error: any) {
+      console.error('Failed to upload profile picture:', error);
+      showToast(extractErrorMessage(error, 'Failed to upload profile picture'), 'error');
+    } finally {
+      setUploadingPicture(false);
+      // Reset file input
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
+  };
+
+  const handleDeletePicture = async () => {
+    if (!user?.profile_picture_url) return;
+
+    if (!window.confirm('Are you sure you want to remove your profile picture?')) {
+      return;
+    }
+
+    try {
+      setUploadingPicture(true);
+      const updated = await authApi.deleteProfilePicture();
+      setUserState(updated);
+      setUser(updated);
+      showToast('Profile picture removed successfully', 'success');
+    } catch (error: any) {
+      console.error('Failed to delete profile picture:', error);
+      showToast(extractErrorMessage(error, 'Failed to remove profile picture'), 'error');
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  // Password validation checks
+  const passwordChecks = {
+    length: newPassword.length >= 8 && newPassword.length <= 128,
+    uppercase: /[A-Z]/.test(newPassword),
+    lowercase: /[a-z]/.test(newPassword),
+    number: /\d/.test(newPassword),
+    special: /[!@#$%^&*(),.?":{}|<>]/.test(newPassword),
+    match: newPassword === confirmPassword && confirmPassword.length > 0,
+  };
+
+  const isPasswordValid = Object.values(passwordChecks).every(check => check === true);
+
+  const handlePasswordChange = async () => {
+    if (!isPasswordValid) {
+      showToast('Please meet all password requirements', 'error');
       return;
     }
 
@@ -96,9 +166,12 @@ export const Profile = () => {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
     } catch (error: any) {
       console.error('Failed to change password:', error);
-      showToast(error.response?.data?.detail || error.message || 'Failed to change password', 'error');
+      showToast(extractErrorMessage(error, 'Failed to change password'), 'error');
     } finally {
       setPasswordLoading(false);
     }
@@ -135,8 +208,43 @@ export const Profile = () => {
       {/* Profile Card */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6">
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 relative group">
             <Avatar user={user} size="xl" />
+            {/* Upload overlay */}
+            <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer">
+              <div className="flex flex-col items-center gap-2">
+                <label className="cursor-pointer p-2 bg-white/90 hover:bg-white rounded-full transition-colors">
+                  <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                    onChange={handlePictureUpload}
+                    className="hidden"
+                    disabled={uploadingPicture}
+                  />
+                </label>
+                {user.profile_picture_url && (
+                  <button
+                    onClick={handleDeletePicture}
+                    disabled={uploadingPicture}
+                    className="p-2 bg-red-500/90 hover:bg-red-600 rounded-full transition-colors"
+                    title="Remove profile picture"
+                  >
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+            {uploadingPicture && (
+              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                <LoadingSpinner size="sm" />
+              </div>
+            )}
           </div>
           <div className="flex-1">
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-1">
@@ -302,42 +410,196 @@ export const Profile = () => {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Current Password
               </label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200"
-                placeholder="Enter current password"
-              />
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full px-4 py-2 pr-10 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200"
+                  placeholder="Enter current password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
+                >
+                  {showCurrentPassword ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 New Password
               </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200"
-                placeholder="Enter new password (min. 8 characters)"
-              />
+              <div className="relative">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className={`w-full px-4 py-2 pr-10 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200 ${
+                    newPassword.length > 0 && !passwordChecks.length
+                      ? 'border-red-300 dark:border-red-700'
+                      : newPassword.length > 0 && isPasswordValid
+                      ? 'border-green-300 dark:border-green-700'
+                      : 'border-gray-200 dark:border-gray-600'
+                  }`}
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
+                >
+                  {showNewPassword ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              
+              {/* Real-time password requirements */}
+              {newPassword.length > 0 && (
+                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Password Requirements:</p>
+                  <ul className="space-y-1.5 text-xs">
+                    <li className={`flex items-center gap-2 ${passwordChecks.length ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {passwordChecks.length ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      <span>8-128 characters</span>
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.uppercase ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {passwordChecks.uppercase ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      <span>At least one uppercase letter (A-Z)</span>
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.lowercase ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {passwordChecks.lowercase ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      <span>At least one lowercase letter (a-z)</span>
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.number ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {passwordChecks.number ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      <span>At least one number (0-9)</span>
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.special ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {passwordChecks.special ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      <span>At least one special character (!@#$%^&*...)</span>
+                    </li>
+                  </ul>
+                </div>
+              )}
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Confirm New Password
               </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200"
-                placeholder="Confirm new password"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`w-full px-4 py-2 pr-10 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200 ${
+                    confirmPassword.length > 0 && !passwordChecks.match
+                      ? 'border-red-300 dark:border-red-700'
+                      : confirmPassword.length > 0 && passwordChecks.match
+                      ? 'border-green-300 dark:border-green-700'
+                      : 'border-gray-200 dark:border-gray-600'
+                  }`}
+                  placeholder="Confirm new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
+                >
+                  {showConfirmPassword ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {confirmPassword.length > 0 && !passwordChecks.match && (
+                <p className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Passwords do not match
+                </p>
+              )}
+              {confirmPassword.length > 0 && passwordChecks.match && (
+                <p className="mt-1.5 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Passwords match
+                </p>
+              )}
             </div>
+            
             <div className="flex gap-3 pt-2">
               <button
                 onClick={handlePasswordChange}
-                disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
+                disabled={passwordLoading || !currentPassword || !isPasswordValid}
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium shadow-sm hover:shadow transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {passwordLoading ? 'Changing...' : 'Change Password'}
@@ -348,6 +610,9 @@ export const Profile = () => {
                   setCurrentPassword('');
                   setNewPassword('');
                   setConfirmPassword('');
+                  setShowCurrentPassword(false);
+                  setShowNewPassword(false);
+                  setShowConfirmPassword(false);
                 }}
                 disabled={passwordLoading}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors duration-200"

@@ -71,9 +71,16 @@ export const Login = () => {
       <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:justify-between lg:bg-gradient-to-br from-primary-600 to-primary-700 lg:p-12 xl:p-16">
         <div>
           <div className="flex items-center space-x-3 mb-12">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center border border-white/30">
-              <span className="text-white font-bold text-lg">SA</span>
-            </div>
+            <img 
+              src={import.meta.env.VITE_BASE_PATH ? `${import.meta.env.VITE_BASE_PATH}logo-icon.svg` : '/logo-icon.svg'} 
+              alt="SETU AI Atlas Logo" 
+              className="w-10 h-10 flex-shrink-0"
+              onError={(e) => {
+                // Fallback if logo fails to load
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+              }}
+            />
             <div>
               <h1 className="text-xl font-bold text-white">SETU AI Atlas</h1>
               <p className="text-xs text-white/80">Enterprise Platform</p>
@@ -133,9 +140,16 @@ export const Login = () => {
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <div className="flex items-center justify-center space-x-3 mb-4">
-              <div className="w-10 h-10 gradient-primary rounded-lg flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-lg">SA</span>
-              </div>
+              <img 
+                src={import.meta.env.VITE_BASE_PATH ? `${import.meta.env.VITE_BASE_PATH}logo-icon.svg` : '/logo-icon.svg'} 
+                alt="SETU AI Atlas Logo" 
+                className="w-10 h-10 flex-shrink-0"
+                onError={(e) => {
+                  // Fallback if logo fails to load
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
               <div className="text-left">
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">SETU AI Atlas</h1>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Enterprise Platform</p>

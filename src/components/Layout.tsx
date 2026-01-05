@@ -144,9 +144,16 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <div className="flex items-center flex-1 min-w-0">
               <Link to="/dashboard" className="flex-shrink-0 flex items-center">
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center shadow-sm">
-                    <span className="text-white font-bold text-sm">SA</span>
-                  </div>
+                  <img 
+                    src={import.meta.env.VITE_BASE_PATH ? `${import.meta.env.VITE_BASE_PATH}logo-icon.svg` : '/logo-icon.svg'} 
+                    alt="SETU AI Atlas Logo" 
+                    className="w-8 h-8 flex-shrink-0"
+                    onError={(e) => {
+                      // Fallback if logo fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                    }}
+                  />
                   <div className="hidden sm:block">
                     <h1 className="text-xl font-bold text-gray-900 dark:text-white">
                       SETU AI Atlas

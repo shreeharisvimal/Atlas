@@ -33,20 +33,23 @@ export default defineConfig({
         manualChunks: (id) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // React and React DOM in separate chunk
-            if (id.includes('react') || id.includes('react-dom')) {
+            // React and all React-related packages in the same chunk
+            // This ensures React is available to all React dependencies
+            if (
+              id.includes('react') || 
+              id.includes('react-dom') ||
+              id.includes('react-router') ||
+              id.includes('react-markdown') ||
+              id.includes('scheduler')
+            ) {
               return 'vendor-react';
-            }
-            // React Router in separate chunk
-            if (id.includes('react-router')) {
-              return 'vendor-router';
             }
             // Axios in separate chunk
             if (id.includes('axios')) {
               return 'vendor-axios';
             }
-            // Markdown libraries in separate chunk
-            if (id.includes('react-markdown') || id.includes('remark')) {
+            // Markdown/remark utilities (non-React) in separate chunk
+            if (id.includes('remark') || id.includes('unified') || id.includes('micromark')) {
               return 'vendor-markdown';
             }
             // Date utilities in separate chunk

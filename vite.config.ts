@@ -33,24 +33,35 @@ export default defineConfig({
         manualChunks: (id) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
-            // React and all React-related packages in the same chunk
+            // CRITICAL: React and all React-related packages MUST be in the same chunk
             // This ensures React is available to all React dependencies
+            // Include ALL markdown-related packages here since react-markdown needs React
+            // Also include any package that might use React hooks
             if (
               id.includes('react') || 
               id.includes('react-dom') ||
               id.includes('react-router') ||
               id.includes('react-markdown') ||
-              id.includes('scheduler')
+              id.includes('remark') ||
+              id.includes('unified') ||
+              id.includes('micromark') ||
+              id.includes('scheduler') ||
+              id.includes('decode-named-character-reference') ||
+              id.includes('character-entities') ||
+              id.includes('mdast') ||
+              id.includes('hast') ||
+              id.includes('zwitch') ||
+              id.includes('bail') ||
+              id.includes('extend') ||
+              id.includes('longest-streak') ||
+              id.includes('vfile') ||
+              id.includes('unist-util')
             ) {
               return 'vendor-react';
             }
             // Axios in separate chunk
             if (id.includes('axios')) {
               return 'vendor-axios';
-            }
-            // Markdown/remark utilities (non-React) in separate chunk
-            if (id.includes('remark') || id.includes('unified') || id.includes('micromark')) {
-              return 'vendor-markdown';
             }
             // Date utilities in separate chunk
             if (id.includes('date-fns')) {

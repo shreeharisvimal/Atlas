@@ -33,9 +33,15 @@ export const NotificationCenter = ({ isOpen, onClose }: NotificationCenterProps)
         limit: 50,
         unread_only: filter === 'unread'
       });
-      setNotifications(data);
+      setNotifications(data || []);
     } catch (error) {
       console.error('Failed to load notifications:', error);
+      // Show error to user if it's not a 404 (which might be expected)
+      const apiError = error as any;
+      if (apiError?.response?.status !== 404) {
+        showToast('Failed to load notifications', 'error');
+      }
+      setNotifications([]);
     } finally {
       setLoading(false);
     }

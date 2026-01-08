@@ -33,7 +33,26 @@ export const tagsApi = {
   removeTagFromTicket: async (ticketId: number, tagId: number): Promise<void> => {
     await apiClient.delete(`/api/v1/tags/tickets/${ticketId}/tags/${tagId}`);
   },
+
+  getTagStatistics: async (): Promise<TagStatistics> => {
+    const response = await apiClient.get<TagStatistics>('/api/v1/tags/statistics');
+    return response.data;
+  },
 };
+
+export interface TagStatistics {
+  total_tags: number;
+  total_tickets: number;
+  tagged_tickets: number;
+  untagged_tickets: number;
+  tag_statistics: Array<{
+    tag_id: number;
+    tag_name: string;
+    tag_color: string;
+    ticket_count: number;
+  }>;
+}
+
 
 
 

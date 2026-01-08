@@ -2,15 +2,13 @@
  * URL utility functions for production-ready asset and API URL handling
  */
 
+import { API_CONFIG } from '../config/constants';
+
 /**
  * Get the API base URL from environment variables
  */
 export const getApiBaseUrl = (): string => {
-  // In production, VITE_API_URL should be set to the backend URL
-  // For development, it defaults to localhost
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const env = (import.meta as any).env;
-  return env?.VITE_API_URL || 'http://localhost:8765';
+  return API_CONFIG.BASE_URL;
 };
 
 /**

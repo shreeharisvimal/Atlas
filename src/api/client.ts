@@ -1,6 +1,7 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { API_CONFIG } from '../config/constants';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8765';
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -10,17 +11,19 @@ const apiClient = axios.create({
 });
 
 let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (value?: any) => void;
-  reject: (reason?: any) => void;
-}> = [];
+interface QueueItem {
+  resolve: (value?: string) => void;
+  reject: (reason?: AxiosError) => void;
+}
+
+let failedQueue: QueueItem[] = [];
 
 const processQueue = (error: AxiosError | null, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
     } else {
-      prom.resolve(token);
+      prom.resolve(token ?? undefined);
     }
   });
   failedQueue = [];
@@ -66,7 +69,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Don't retry login endpoint failures
     if (originalRequest?.url?.includes('/auth/login')) {

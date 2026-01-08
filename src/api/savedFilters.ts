@@ -12,6 +12,8 @@ export interface SavedFilter {
     search?: string;
   };
   is_default: string;
+  is_shared?: boolean;
+  shared_with_user_ids?: number[] | null;
   created_at: string;
   updated_at?: string;
 }
@@ -26,6 +28,8 @@ export interface SavedFilterCreate {
     search?: string;
   };
   is_default?: string;
+  is_shared?: boolean;
+  shared_with_user_ids?: number[] | null;
 }
 
 export interface SavedFilterUpdate {
@@ -38,11 +42,14 @@ export interface SavedFilterUpdate {
     search?: string;
   };
   is_default?: string;
+  is_shared?: boolean;
+  shared_with_user_ids?: number[] | null;
 }
 
 export const savedFiltersApi = {
-  getSavedFilters: async (): Promise<SavedFilter[]> => {
-    const response = await apiClient.get<SavedFilter[]>('/api/v1/saved-filters');
+  getSavedFilters: async (includeShared?: boolean): Promise<SavedFilter[]> => {
+    const params = includeShared ? '?include_shared=true' : '';
+    const response = await apiClient.get<SavedFilter[]>(`/api/v1/saved-filters${params}`);
     return response.data;
   },
 
@@ -64,7 +71,23 @@ export const savedFiltersApi = {
   deleteSavedFilter: async (id: number): Promise<void> => {
     await apiClient.delete(`/api/v1/saved-filters/${id}`);
   },
+
+  shareFilter: async (filterId: number, userIds?: number[], isPublic?: boolean): Promise<SavedFilter> => {
+    const params = new URLSearchParams();
+    if (isPublic) params.append('is_public', 'true');
+    if (userIds && userIds.length > 0) {
+      userIds.forEach(id => params.append('user_ids', id.toString()));
+    }
+    const response = await apiClient.post<SavedFilter>(`/api/v1/saved-filters/${filterId}/share?${params.toString()}`);
+    return response.data;
+  },
+
+  unshareFilter: async (filterId: number): Promise<SavedFilter> => {
+    const response = await apiClient.post<SavedFilter>(`/api/v1/saved-filters/${filterId}/unshare`);
+    return response.data;
+  },
 };
+
 
 
 

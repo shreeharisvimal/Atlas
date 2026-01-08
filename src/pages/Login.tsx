@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
@@ -9,6 +9,14 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { login } = useAuth();
+
+  // Clear any errors and stale tokens when component mounts
+  useEffect(() => {
+    setError('');
+    setErrors({});
+    // Clear any stale tokens to prevent automatic validation attempts
+    // The login function will handle clearing tokens before attempting login
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
@@ -43,20 +51,33 @@ export const Login = () => {
     try {
       await login(email, password);
     } catch (err: any) {
-      const errorMsg = err.message || 'Login failed. Please check your credentials.';
+      // Extract meaningful error message from API response
+      let errorMsg = 'Login failed. Please check your credentials.';
+      
+      if (err.response?.data?.detail) {
+        // Use the detail from API response
+        errorMsg = err.response.data.detail;
+      } else if (err.message && !err.message.includes('status code')) {
+        // Use error message if it's not a generic axios status code message
+        errorMsg = err.message;
+      }
       
       // Set field-specific errors based on error message
       const newErrors: { email?: string; password?: string } = {};
-      if (errorMsg.toLowerCase().includes('user does not exist') || 
-          errorMsg.toLowerCase().includes('invalid email')) {
+      const lowerMsg = errorMsg.toLowerCase();
+      
+      if (lowerMsg.includes('user does not exist') || 
+          lowerMsg.includes('invalid email') ||
+          lowerMsg.includes('email')) {
         newErrors.email = errorMsg;
-      } else if (errorMsg.toLowerCase().includes('invalid password') ||
-                 errorMsg.toLowerCase().includes('incorrect password')) {
+      } else if (lowerMsg.includes('invalid password') ||
+                 lowerMsg.includes('incorrect password') ||
+                 lowerMsg.includes('password')) {
         newErrors.password = errorMsg;
-      } else if (errorMsg.toLowerCase().includes('inactive')) {
+      } else if (lowerMsg.includes('inactive')) {
         newErrors.email = errorMsg;
       } else {
-        // Show general error banner for other errors (e.g., account inactive, password expired)
+        // Show general error banner for other errors
         setError(errorMsg);
       }
       setErrors(newErrors);

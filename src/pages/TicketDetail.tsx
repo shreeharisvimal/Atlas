@@ -5,15 +5,23 @@ import { commentsApi } from '../api/comments';
 import { ticketHistoryApi } from '../api/ticketHistory';
 import { attachmentsApi } from '../api/attachments';
 import { usersApi } from '../api/users';
+import { projectsApi } from '../api/projects';
+import { sprintsApi } from '../api/sprints';
+import { ticketVotesApi } from '../api/ticketVotes';
+import { ticketLinksApi } from '../api/ticketLinks';
+import { timeTrackingApi } from '../api/timeTracking';
+import { slaTrackingApi } from '../api/slaTracking';
 import { useToastStore } from '../store/toast';
 import { TicketDetailSkeleton } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import { MarkdownEditor } from '../components/MarkdownEditor';
 import { AttachmentUpload } from '../components/AttachmentUpload';
-import type { Ticket, Comment, TicketHistory, TicketStatus, Priority, IssueType, User, Attachment } from '../types';
+import type { Ticket, Comment, TicketHistory, User, Attachment, Project, Sprint, TicketVoteSummary } from '../types';
+import { Priority, TicketStatus, IssueType } from '../types';
 import { format, startOfDay } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 export const TicketDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -36,13 +44,18 @@ export const TicketDetail = () => {
     priority: '' as Priority,
     issue_type: '' as IssueType,
     assigned_to_id: null as number | null,
+    project_id: null as number | null,
+    sprint_id: null as number | null,
   });
   const [statuses, setStatuses] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<string[]>([]);
   const [issueTypes, setIssueTypes] = useState<string[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const historyInitialized = useRef(false);
+  const [_voteSummary, setVoteSummary] = useState<TicketVoteSummary | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -54,6 +67,10 @@ export const TicketDetail = () => {
       loadHistory();
       loadAttachments();
       loadDropdowns();
+      loadVoteSummary();
+      loadTicketLinks();
+      loadTimeTracking();
+      loadSLA();
     }
   }, [id]);
 
@@ -71,7 +88,13 @@ export const TicketDetail = () => {
         priority: data.priority,
         issue_type: data.issue_type,
         assigned_to_id: data.assigned_to_id,
+        project_id: data.project_id,
+        sprint_id: data.sprint_id,
       });
+      // Load sprints if ticket has a project
+      if (data.project_id) {
+        await loadSprints(data.project_id);
+      }
     } catch (error) {
       console.error('Failed to load ticket:', error);
       showToast('Failed to load ticket', 'error');
@@ -116,16 +139,95 @@ export const TicketDetail = () => {
     }
   };
 
+  const loadSprints = async (projectId: number | null) => {
+    if (!projectId) {
+      setSprints([]);
+      return;
+    }
+    try {
+      console.log('Loading sprints for project:', projectId);
+      const sprintsData = await sprintsApi.getSprints(projectId, false);
+      console.log('Loaded sprints:', sprintsData);
+      // Ensure we have an array and validate the data structure
+      if (Array.isArray(sprintsData)) {
+        // Filter out any invalid entries and ensure they have the expected structure
+        const validSprints = sprintsData.filter(sprint => sprint && sprint.id && sprint.name);
+        setSprints(validSprints);
+        if (validSprints.length !== sprintsData.length) {
+          console.warn('Some sprints were filtered out due to invalid structure');
+        }
+      } else {
+        console.error('Sprints data is not an array:', sprintsData);
+        setSprints([]);
+      }
+    } catch (error) {
+      console.error('Failed to load sprints:', error);
+      const apiError = error as any;
+      if (apiError?.response?.status === 404) {
+        console.error('Sprints endpoint returned 404 - check if route is correct');
+      }
+      setSprints([]);
+    }
+  };
+
+  const loadVoteSummary = async () => {
+    if (!id) return;
+    try {
+      const summary = await ticketVotesApi.getVoteSummary(parseInt(id));
+      setVoteSummary(summary);
+    } catch (error) {
+      console.error('Failed to load vote summary:', error);
+    }
+  };
+
+
+  const loadTicketLinks = async () => {
+    if (!id) return;
+    try {
+      await ticketLinksApi.getTicketLinks(parseInt(id));
+    } catch (error) {
+      console.error('Failed to load ticket links:', error);
+    }
+  };
+
+
+  const loadTimeTracking = async () => {
+    if (!id) return;
+    try {
+      await Promise.all([
+        timeTrackingApi.getTimeEntries(parseInt(id)),
+        timeTrackingApi.getTimeSummary(parseInt(id)),
+      ]);
+    } catch (error) {
+      console.error('Failed to load time tracking:', error);
+    }
+  };
+
+
+  const loadSLA = async () => {
+    if (!id) return;
+    try {
+      await slaTrackingApi.getSLA(parseInt(id));
+    } catch (error: any) {
+      if (error.response?.status !== 404) {
+        console.error('Failed to load SLA:', error);
+      }
+    }
+  };
+
+
   const loadDropdowns = async () => {
     try {
-      const [statusesData, prioritiesData, typesData] = await Promise.all([
+      const [statusesData, prioritiesData, typesData, projectsData] = await Promise.all([
         ticketsApi.getStatuses(),
         ticketsApi.getPriorities(),
         ticketsApi.getIssueTypes(),
+        projectsApi.getProjects(true),
       ]);
       setStatuses(statusesData);
       setPriorities(prioritiesData);
       setIssueTypes(typesData);
+      setProjects(projectsData);
       // Load users separately
       try {
         const usersList = await usersApi.getUsersDropdown();
@@ -138,6 +240,18 @@ export const TicketDetail = () => {
     }
   };
 
+  // Load sprints when project changes in edit mode or when entering edit mode
+  useEffect(() => {
+    if (editing && editData.project_id) {
+      // Always reload sprints when entering edit mode or when project changes
+      // This ensures sprints are available even if they weren't loaded initially
+      loadSprints(editData.project_id);
+    } else if (!editing) {
+      // Clear sprints when exiting edit mode to avoid stale data
+      // They will be reloaded when needed
+    }
+  }, [editData.project_id, editing]);
+
   const handleUpdate = async () => {
     if (!id || !ticket) return;
     try {
@@ -149,18 +263,16 @@ export const TicketDetail = () => {
         priority: editData.priority,
         issue_type: editData.issue_type,
         assigned_to_id: editData.assigned_to_id,
+        project_id: editData.project_id,
+        sprint_id: editData.sprint_id,
       });
       setTicket(updated);
       setEditing(false);
       showToast('Ticket updated successfully', 'success');
       loadHistory();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to update ticket:', error);
-      // Extract error message from backend response
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'Failed to update ticket';
+      const errorMessage = extractErrorMessage(error, 'Failed to update ticket');
       showToast(errorMessage, 'error');
     } finally {
       setSaving(false);
@@ -185,16 +297,13 @@ export const TicketDetail = () => {
       const newStatusLabel = newStatus.replace('_', ' ');
       showToast(`Status changed from ${oldStatusLabel} to ${newStatusLabel}`, 'success');
       loadHistory();
-    } catch (error: any) {
+    } catch (error) {
       // Revert optimistic update on error
       setTicket({ ...ticket, status: oldStatus });
       setEditData({ ...editData, status: oldStatus });
       
       console.error('Failed to update status:', error);
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'Failed to update status';
+      const errorMessage = extractErrorMessage(error, 'Failed to update status');
       showToast(errorMessage, 'error');
     } finally {
       setSaving(false);
@@ -215,13 +324,9 @@ export const TicketDetail = () => {
       setCommentText('');
       showToast('Comment added successfully', 'success');
       loadHistory();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to add comment:', error);
-      // Extract error message from backend response
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'Failed to add comment';
+      const errorMessage = extractErrorMessage(error, 'Failed to add comment');
       showToast(errorMessage, 'error');
     } finally {
       setSubmittingComment(false);
@@ -235,13 +340,9 @@ export const TicketDetail = () => {
       await ticketsApi.deleteTicket(parseInt(id));
       showToast('Ticket deleted successfully', 'success');
       navigate('/tickets');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to delete ticket:', error);
-      // Extract error message from backend response
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'Failed to delete ticket';
+      const errorMessage = extractErrorMessage(error, 'Failed to delete ticket');
       showToast(errorMessage, 'error');
     }
   };
@@ -485,6 +586,8 @@ export const TicketDetail = () => {
                       priority: ticket.priority,
                       issue_type: ticket.issue_type,
                       assigned_to_id: ticket.assigned_to_id,
+                      project_id: ticket.project_id,
+                      sprint_id: ticket.sprint_id,
                     });
                   }
                 }}
@@ -496,7 +599,13 @@ export const TicketDetail = () => {
           ) : (
             <>
               <button
-                onClick={() => setEditing(true)}
+                onClick={() => {
+                  setEditing(true);
+                  // Ensure sprints are loaded when entering edit mode if project exists
+                  if (editData.project_id && sprints.length === 0) {
+                    loadSprints(editData.project_id);
+                  }
+                }}
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium shadow-sm hover:shadow transition-colors duration-200"
               >
                 Edit
@@ -801,6 +910,87 @@ export const TicketDetail = () => {
                   <span className="px-3 py-1 text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md">
                     {ticket.issue_type}
                   </span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Project
+                </label>
+                {editing ? (
+                  <select
+                    value={editData.project_id || ''}
+                    onChange={(e) => {
+                      const newProjectId = e.target.value ? parseInt(e.target.value) : null;
+                      setEditData({ 
+                        ...editData, 
+                        project_id: newProjectId,
+                        sprint_id: null // Reset sprint when project changes
+                      });
+                      if (newProjectId) {
+                        loadSprints(newProjectId);
+                      } else {
+                        setSprints([]);
+                      }
+                    }}
+                    className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="">No Project</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div>
+                    {ticket.project ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-900 dark:text-white font-medium">{ticket.project.name}</span>
+                        {ticket.project.key && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">({ticket.project.key})</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-500 dark:text-gray-400">No Project</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sprint
+                </label>
+                {editing ? (
+                  <select
+                    value={editData.sprint_id || ''}
+                    onChange={(e) => setEditData({ ...editData, sprint_id: e.target.value ? parseInt(e.target.value) : null })}
+                    disabled={!editData.project_id}
+                    className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">No Sprint</option>
+                    {sprints.map((sprint) => (
+                      <option key={sprint.id} value={sprint.id}>
+                        {sprint.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div>
+                    {ticket.sprint ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-900 dark:text-white font-medium">{ticket.sprint.name}</span>
+                        {ticket.sprint.is_active && (
+                          <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-md">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-500 dark:text-gray-400">No Sprint</span>
+                    )}
+                  </div>
                 )}
               </div>
 

@@ -4,10 +4,15 @@ import { useAuthStore } from '../store/auth';
 import { useThemeStore } from '../store/theme';
 import { SystemRole } from '../types';
 import { NotificationCenter } from './NotificationCenter';
+import { NotificationPopupContainer } from './NotificationPopup';
 import { Breadcrumbs } from './Breadcrumbs';
 import { Avatar } from './Avatar';
 import { notificationsApi } from '../api/notifications';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { useNotificationPopupStore } from '../store/notificationPopupStore';
+import { NotificationType } from '../types';
 import type { NotificationStats } from '../types';
+import { browserNotificationService } from '../services/browserNotificationService';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuthStore();
@@ -17,9 +22,39 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationStats, setNotificationStats] = useState<NotificationStats | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { lastMessage } = useWebSocket();
+  const { addNotification } = useNotificationPopupStore();
 
   useEffect(() => {
     if (user) {
+      // Request browser notification permission on mount
+      // This is important - browsers require user interaction to request permission
+      // So we request it as soon as the user logs in
+      if (browserNotificationService.isSupported()) {
+        // Check current permission status
+        const currentPermission = browserNotificationService.getPermission();
+        
+        if (currentPermission === 'default') {
+          // Permission not yet requested, request it now
+          browserNotificationService.requestPermission().then((permission) => {
+            if (permission === 'granted') {
+              console.log('✅ Browser notification permission granted! System notifications will now work.');
+            } else if (permission === 'denied') {
+              console.warn('❌ Browser notification permission denied. Notifications will only show in-app.');
+              console.warn('💡 User can enable notifications in browser settings.');
+            }
+          }).catch((error) => {
+            console.error('Error requesting notification permission:', error);
+          });
+        } else if (currentPermission === 'granted') {
+          console.log('✅ Browser notifications already enabled');
+        } else {
+          console.warn('❌ Browser notifications were previously denied');
+        }
+      } else {
+        console.warn('⚠️ Browser does not support system notifications');
+      }
+
       // Wait longer to ensure token is available and validated before making requests
       const timer = setTimeout(() => {
         const token = localStorage.getItem('access_token');
@@ -50,6 +85,190 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       };
     }
   }, [user]);
+
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    if (lastMessage.type === 'notification') {
+      // Add notification to pop-up store
+      const notificationData = lastMessage.data;
+      const notificationId = `notification-${notificationData.id}-${Date.now()}`;
+      
+      // Check if page is visible (tab is active)
+      const isPageVisible = !document.hidden;
+      
+      // Show in-app popup if page is visible
+      if (isPageVisible) {
+        addNotification({
+          id: notificationId,
+          title: notificationData.title,
+          message: notificationData.message,
+          notification_type: notificationData.notification_type,
+          ticket_id: notificationData.ticket_id,
+          is_read: notificationData.is_read,
+          created_at: notificationData.created_at,
+          timestamp: Date.now(),
+        });
+      }
+      
+      // ALWAYS show browser notification (system-level, like WhatsApp)
+      // This works even when tab is in background or minimized
+      // The service will request permission if needed
+      if (notificationData.ticket_id) {
+        browserNotificationService.registerClickHandler(
+          notificationData.ticket_id,
+          () => {
+            navigate(`/tickets/${notificationData.ticket_id}`);
+          }
+        );
+      }
+      
+      // Always try to show browser notification (system-level)
+      // This will request permission automatically if not granted
+      // IMPORTANT: This creates a REAL system-level notification (like WhatsApp)
+      // It will appear even when browser tab is minimized or in background
+      browserNotificationService.showNotification({
+        title: notificationData.title,
+        message: notificationData.message,
+        notificationType: notificationData.notification_type as NotificationType,
+        ticketId: notificationData.ticket_id,
+        tag: `notification-${notificationData.id}`,
+      }).then((notification) => {
+        if (notification) {
+          console.log('✅ System-level notification displayed successfully');
+        } else {
+          console.warn('⚠️ System notification not shown (permission may be needed)');
+        }
+      }).catch((error) => {
+        console.error('❌ Failed to show browser notification:', error);
+      });
+
+      // Always fetch fresh stats from server to ensure accuracy
+      // Don't increment locally as the server is the source of truth
+      loadNotificationStats();
+    } else if (lastMessage.type === 'ticket_update') {
+      // Convert ticket updates to pop-up notifications
+      // NOTE: These are NOT database notifications, just UI pop-ups
+      // They should NOT increment the notification count
+      const update = lastMessage.data;
+      const updatedBy = update.updated_by?.full_name || 'Someone';
+      
+      let title = '';
+      let message = '';
+      let notificationType: NotificationType = NotificationType.TICKET_UPDATED;
+      
+      if (update.action === 'status_changed') {
+        const oldStatus = update.old_status?.replace(/_/g, ' ') || 'N/A';
+        const newStatus = update.new_status?.replace(/_/g, ' ') || 'N/A';
+        title = `Status Changed: Ticket #${update.ticket_id}`;
+        message = `${updatedBy} changed status from ${oldStatus} to ${newStatus}`;
+        notificationType = NotificationType.TICKET_STATUS_CHANGED;
+      } else if (update.action === 'updated') {
+        title = `Ticket Updated: #${update.ticket_id}`;
+        message = `${updatedBy} updated the ticket`;
+        notificationType = NotificationType.TICKET_UPDATED;
+      } else if (update.action === 'created') {
+        title = `New Ticket: #${update.ticket_id}`;
+        message = `${updatedBy} created a new ticket: ${update.ticket?.title || 'Untitled'}`;
+        notificationType = NotificationType.TICKET_CREATED;
+      } else if (update.action === 'assigned') {
+        title = `Ticket Assigned: #${update.ticket_id}`;
+        message = `${updatedBy} assigned the ticket`;
+        notificationType = NotificationType.TICKET_ASSIGNED;
+      }
+      
+      // Show pop-up notification for ticket updates (instant)
+      // Use a deduplication mechanism: check if we recently added a notification for this ticket
+      if (title && message) {
+        const notificationId = `ticket-update-${update.ticket_id}-${Date.now()}`;
+        const isPageVisible = !document.hidden;
+        
+        // Show in-app popup if page is visible
+        if (isPageVisible) {
+          addNotification({
+            id: notificationId,
+            title,
+            message,
+            notification_type: notificationType,
+            ticket_id: update.ticket_id,
+            is_read: false,
+            created_at: lastMessage.timestamp,
+            timestamp: Date.now(),
+          });
+        }
+        
+        // Always show browser notification (system-level, like WhatsApp)
+        if (update.ticket_id) {
+          browserNotificationService.registerClickHandler(
+            update.ticket_id,
+            () => {
+              navigate(`/tickets/${update.ticket_id}`);
+            }
+          );
+          
+          // Always try to show browser notification (system-level)
+          browserNotificationService.showNotification({
+            title,
+            message,
+            notificationType,
+            ticketId: update.ticket_id,
+            tag: `ticket-update-${update.ticket_id}`,
+          }).catch((error) => {
+            console.error('Failed to show browser notification:', error);
+          });
+        }
+        
+        // Don't update notification stats - ticket_update messages are not database notifications
+        // They're just UI pop-ups for real-time updates
+      }
+    } else if (lastMessage.type === 'comment') {
+      // Convert comment updates to pop-up notifications
+      // NOTE: These are NOT database notifications, just UI pop-ups
+      // They should NOT increment the notification count
+      const comment = lastMessage.data;
+      const author = comment.author?.full_name || 'Someone';
+      const isPageVisible = !document.hidden;
+      
+      // Show in-app popup if page is visible
+      if (isPageVisible) {
+        addNotification({
+          id: `comment-${comment.comment_id}-${Date.now()}`,
+          title: `New Comment: Ticket #${comment.ticket_id}`,
+          message: `${author} commented on ticket #${comment.ticket_id}`,
+          notification_type: NotificationType.TICKET_COMMENTED,
+          ticket_id: comment.ticket_id,
+          is_read: false,
+          created_at: lastMessage.timestamp,
+          timestamp: Date.now(),
+        });
+      }
+      
+      // Always show browser notification (system-level, like WhatsApp)
+      if (comment.ticket_id) {
+        browserNotificationService.registerClickHandler(
+          comment.ticket_id,
+          () => {
+            navigate(`/tickets/${comment.ticket_id}`);
+          }
+        );
+        
+        // Always try to show browser notification (system-level)
+        browserNotificationService.showNotification({
+          title: `New Comment: Ticket #${comment.ticket_id}`,
+          message: `${author} commented on ticket #${comment.ticket_id}`,
+          notificationType: NotificationType.TICKET_COMMENTED,
+          ticketId: comment.ticket_id,
+          tag: `comment-${comment.comment_id}`,
+        }).catch((error) => {
+          console.error('Failed to show browser notification:', error);
+        });
+      }
+      
+      // Don't update notification stats - comment messages are not database notifications
+      // They're just UI pop-ups for real-time updates
+    }
+  }, [lastMessage, addNotification]);
 
   const loadNotificationStats = async () => {
     try {
@@ -305,20 +524,37 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   </>
                 )}
               </div>
-              <button
-                onClick={() => setShowNotifications(true)}
-                className="relative p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
-                aria-label="Notifications"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                {notificationStats && notificationStats.unread > 0 && (
-                  <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white">
-                    {notificationStats.unread > 9 ? '9+' : notificationStats.unread}
-                  </span>
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(true)}
+                  className="relative p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+                  aria-label="Notifications"
+                  title="Notifications"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {notificationStats && notificationStats.unread > 0 && (
+                    <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white">
+                      {notificationStats.unread > 9 ? '9+' : notificationStats.unread}
+                    </span>
+                  )}
+                </button>
+                {/* Browser notification permission indicator - shows yellow dot if permission not granted */}
+                {browserNotificationService.isSupported() && !browserNotificationService.hasPermission() && (
+                  <button
+                    onClick={async () => {
+                      const permission = await browserNotificationService.requestPermission();
+                      if (permission === 'granted') {
+                        console.log('Browser notifications enabled!');
+                      }
+                    }}
+                    className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-yellow-500 border-2 border-white dark:border-gray-800 hover:bg-yellow-600 transition-colors"
+                    title="Click to enable browser notifications (works even when tab is in background)"
+                    aria-label="Enable browser notifications"
+                  />
                 )}
-              </button>
+              </div>
               <div className="hidden sm:flex items-center space-x-1 sm:space-x-2 ml-1 sm:ml-2">
                 <Link
                   to="/profile"
@@ -442,6 +678,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           loadNotificationStats();
         }}
       />
+      <NotificationPopupContainer />
     </div>
   );
 };

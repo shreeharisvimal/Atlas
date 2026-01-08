@@ -5,12 +5,16 @@ import { usersApi } from '../api/users';
 import { projectsApi } from '../api/projects';
 import { sprintsApi } from '../api/sprints';
 import { attachmentsApi } from '../api/attachments';
+import { ticketTemplatesApi } from '../api/ticketTemplates';
+import type { TicketTemplate } from '../types';
 import { useToastStore } from '../store/toast';
 import { useAuthStore } from '../store/auth';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { MarkdownEditor } from '../components/MarkdownEditor';
 import type { TicketCreate, User, Project, Sprint } from '../types';
 import { IssueType, Priority } from '../types';
+import { VALIDATION_CONFIG } from '../config/constants';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 export const CreateTicket = () => {
   const navigate = useNavigate();
@@ -33,6 +37,8 @@ export const CreateTicket = () => {
   const [loadingDropdowns, setLoadingDropdowns] = useState(true);
   const [errors, setErrors] = useState<{ title?: string; description?: string; project?: string }>({});
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [_templates, setTemplates] = useState<TicketTemplate[]>([]);
+  const [_selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToastStore();
 
@@ -45,7 +51,15 @@ export const CreateTicket = () => {
         setProjectId(parsedId);
       }
     }
+    const templateIdParam = searchParams.get('templateId');
+    if (templateIdParam) {
+      const parsedId = parseInt(templateIdParam, 10);
+      if (!isNaN(parsedId)) {
+        setSelectedTemplateId(parsedId);
+      }
+    }
     loadDropdowns();
+    loadTemplates();
   }, [searchParams]);
 
   useEffect(() => {
@@ -62,9 +76,37 @@ export const CreateTicket = () => {
     try {
       const sprintsData = await sprintsApi.getSprints(projectId, true);
       setSprints(sprintsData);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load sprints:', error);
     }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const data = await ticketTemplatesApi.getTemplates(true);
+      setTemplates(data);
+      // If templateId is in URL, load it
+      const templateIdParam = searchParams.get('templateId');
+      if (templateIdParam) {
+        const parsedId = parseInt(templateIdParam, 10);
+        if (!isNaN(parsedId)) {
+          const template = data.find(t => t.id === parsedId);
+          if (template) {
+            handleTemplateSelect(template);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+    }
+  };
+
+  const handleTemplateSelect = (template: TicketTemplate) => {
+    setSelectedTemplateId(template.id);
+    setTitle(template.default_title || '');
+    setDescription(template.default_description || '');
+    setIssueType(template.issue_type);
+    setPriority(template.priority);
   };
 
   const loadDropdowns = async () => {
@@ -79,38 +121,34 @@ export const CreateTicket = () => {
 
       try {
         usersData = await usersApi.getUsersDropdown();
-        console.log('Loaded users:', usersData);
-      } catch (error: any) {
-        console.error('Failed to load users:', error);
-        showToast('Failed to load users list', 'error');
+      } catch (error) {
+        // Error handling: show user-friendly message, fallback gracefully
+        const errorMessage = extractErrorMessage(error, 'Failed to load users list');
+        showToast(errorMessage, 'error');
       }
 
       try {
         projectsData = await projectsApi.getProjects(true);
-        console.log('Loaded projects:', projectsData);
-      } catch (error: any) {
-        console.error('Failed to load projects:', error);
-        showToast('Failed to load projects list', 'error');
+      } catch (error) {
+        // Error handling: show user-friendly message, fallback gracefully
+        const errorMessage = extractErrorMessage(error, 'Failed to load projects list');
+        showToast(errorMessage, 'error');
       }
 
       try {
         typesData = await ticketsApi.getIssueTypes();
-        console.log('Loaded issue types:', typesData);
-      } catch (error: any) {
+      } catch (error) {
+        // Fallback to enum values if API call fails
         console.error('Failed to load issue types:', error);
-        // Fallback to enum values
         typesData = Object.values(IssueType);
-        console.log('Using fallback issue types:', typesData);
       }
 
       try {
         prioritiesData = await ticketsApi.getPriorities();
-        console.log('Loaded priorities:', prioritiesData);
-      } catch (error: any) {
+      } catch (error) {
+        // Fallback to enum values if API call fails
         console.error('Failed to load priorities:', error);
-        // Fallback to enum values
         prioritiesData = Object.values(Priority);
-        console.log('Using fallback priorities:', prioritiesData);
       }
 
       // Ensure current user is in the users list
@@ -149,10 +187,10 @@ export const CreateTicket = () => {
     
     if (!title.trim()) {
       newErrors.title = 'Title is required';
-    } else if (title.trim().length < 3) {
-      newErrors.title = 'Title must be at least 3 characters';
-    } else if (title.trim().length > 200) {
-      newErrors.title = 'Title must be less than 200 characters';
+    } else if (title.trim().length < VALIDATION_CONFIG.MIN_TITLE_LENGTH) {
+      newErrors.title = `Title must be at least ${VALIDATION_CONFIG.MIN_TITLE_LENGTH} characters`;
+    } else if (title.trim().length > VALIDATION_CONFIG.MAX_TITLE_LENGTH) {
+      newErrors.title = `Title must be less than ${VALIDATION_CONFIG.MAX_TITLE_LENGTH} characters`;
     }
     
     if (!description.trim()) {
@@ -207,18 +245,20 @@ export const CreateTicket = () => {
             await attachmentsApi.uploadAttachment(ticket.id, file);
           }
           showToast('Ticket created with attachments successfully', 'success');
-        } catch (attachmentError: any) {
+        } catch (attachmentError) {
           console.error('Failed to upload attachments:', attachmentError);
-          showToast('Ticket created but some attachments failed to upload', 'warning');
+          const errorMessage = extractErrorMessage(attachmentError, 'Failed to upload attachments');
+          showToast(`Ticket created but attachments failed: ${errorMessage}`, 'warning');
         }
       } else {
         showToast('Ticket created successfully', 'success');
       }
       
       navigate(`/tickets/${ticket.id}`);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to create ticket:', error);
-      showToast(error.response?.data?.detail || 'Failed to create ticket', 'error');
+      const errorMessage = extractErrorMessage(error, 'Failed to create ticket');
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }

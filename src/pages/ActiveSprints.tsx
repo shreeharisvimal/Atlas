@@ -5,6 +5,7 @@ import { projectsApi } from '../api/projects';
 import { ticketsApi } from '../api/tickets';
 import { useToastStore } from '../store/toast';
 import { useAuthStore } from '../store/auth';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
 import type { Sprint, Ticket, Project } from '../types';
@@ -63,6 +64,59 @@ export const ActiveSprints = () => {
     }
   }, [selectedSprint]);
 
+  // Real-time updates via WebSocket
+  const { lastMessage } = useWebSocket();
+
+  useEffect(() => {
+    if (!lastMessage || !selectedSprint) return;
+
+    // Handle ticket updates
+    if (lastMessage.type === 'ticket_update') {
+      const update = lastMessage.data;
+      
+      if (update.action === 'status_changed') {
+        // Only update if ticket belongs to current sprint (if sprint_id is provided)
+        if (update.sprint_id && update.sprint_id !== selectedSprint.id) {
+          // Ticket is in a different sprint, ignore
+          return;
+        }
+        
+        // Update ticket status in local state for instant UI update
+        // This will automatically move the ticket to the correct column
+        setTickets(prevTickets => {
+          const ticketIndex = prevTickets.findIndex(t => t.id === update.ticket_id);
+          if (ticketIndex !== -1) {
+            // Ticket is in current sprint, update it immediately
+            const updatedTickets = [...prevTickets];
+            updatedTickets[ticketIndex] = {
+              ...updatedTickets[ticketIndex],
+              status: update.new_status as TicketStatus,
+              updated_at: new Date().toISOString(), // Update timestamp
+            };
+            // Force re-render by creating new array reference
+            return updatedTickets;
+          } else {
+            // Ticket not in current sprint's list, but might have been moved to this sprint
+            // Reload to get latest state
+            loadTickets();
+            return prevTickets;
+          }
+        });
+      } else if (update.action === 'updated') {
+        // Reload to get full ticket data
+        loadTickets();
+      } else if (update.action === 'created') {
+        // If new ticket is for current sprint, reload
+        if (update.ticket?.sprint_id === selectedSprint.id) {
+          loadTickets();
+        }
+      } else if (update.action === 'assigned') {
+        // Reload to get updated assignment info
+        loadTickets();
+      }
+    }
+  }, [lastMessage, selectedSprint]);
+
   const loadProjects = async () => {
     try {
       const data = await projectsApi.getProjects(true);
@@ -83,51 +137,41 @@ export const ActiveSprints = () => {
   };
 
   const loadSprints = async () => {
+    // Early return if no project is selected
     if (!selectedProject) {
-      console.log('No project selected, skipping sprint load');
       setSprints([]);
       setSelectedSprint(null);
       return;
     }
     
     setLoadingSprints(true);
-    console.log('Loading sprints for project:', selectedProject);
     
     try {
-      // First try to load active sprints
-      console.log('Fetching active sprints...');
+      // First try to load active sprints for better UX
       let data = await sprintsApi.getActiveSprints(selectedProject);
-      console.log('Active sprints response:', data);
       
       // If no active sprints, load all sprints as fallback
       if (data.length === 0) {
-        console.log('No active sprints found, loading all sprints...');
         data = await sprintsApi.getSprints(selectedProject, false);
-        console.log('All sprints response:', data);
       }
       
-      console.log('Setting sprints:', data);
       setSprints(data);
       
+      // Auto-select first sprint if available and none is currently selected
       if (data.length > 0 && !selectedSprint) {
-        console.log('Auto-selecting first sprint:', data[0]);
         setSelectedSprint(data[0]);
       } else if (data.length === 0) {
-        console.log('No sprints found for project');
+        // Clear selection if no sprints found
         setSelectedSprint(null);
         setTickets([]);
       }
     } catch (error: any) {
-      console.error('Failed to load sprints:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        code: error.code
-      });
+      // Error handling: clear state and show user-friendly error message
       setSprints([]);
       setSelectedSprint(null);
       setTickets([]);
+      
+      // Distinguish between network errors and API errors
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         showToast('Unable to connect to the server. Please ensure the backend server is running.', 'error');
       } else {

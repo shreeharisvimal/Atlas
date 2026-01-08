@@ -75,6 +75,7 @@ export interface Ticket {
   assignee: User | null;
   project: Project | null;
   sprint: Sprint | null;
+  tags?: Tag[];
 }
 
 export interface Comment {
@@ -94,7 +95,7 @@ export interface ActivityLog {
   user_id: number;
   action: string;
   description: string;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   user: User;
 }
@@ -219,7 +220,7 @@ export interface UserPreference {
   theme: string; // 'light' | 'dark' | 'system'
   email_notifications: boolean;
   in_app_notifications: boolean;
-  default_filters: Record<string, any> | null; // JSON object
+  default_filters: Record<string, unknown> | null; // JSON object
   language: string;
   created_at: string;
   updated_at: string | null;
@@ -233,25 +234,21 @@ export interface TicketHistory {
   old_value: string | null;
   new_value: string | null;
   change_type: string; // 'CREATE' | 'UPDATE' | 'DELETE'
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   user: User;
 }
 
-// Ticket interface with all Phase 3 features
-export interface Ticket {
-  id: number;
-  title: string;
-  description: string;
-  issue_type: IssueType;
-  priority: Priority;
-  status: TicketStatus;
-  created_by_id: number;
-  assigned_to_id: number | null;
-  created_at: string;
-  updated_at: string | null;
-  creator: User;
-  assignee: User | null;
-  tags?: Tag[]; // Phase 3: Tags
-}
+// Note: Ticket interface is already defined above (line 60) with all fields including tags, project, sprint, etc.
+// This duplicate definition has been removed to avoid conflicts.
+
+// Re-export types from API modules
+export type { TicketVote, TicketVoteSummary, VoteType } from '../api/ticketVotes';
+export type { TicketTemplate, TicketTemplateCreate, TicketTemplateUpdate } from '../api/ticketTemplates';
+export type { TicketLink, TicketLinkCreate } from '../api/ticketLinks';
+export { LinkType } from '../api/ticketLinks';
+export type { TimeEntry, TimeEntryCreate, TimeEstimate, TimeEstimateCreate, TimeTrackingSummary } from '../api/timeTracking';
+export type { SLA, SLACreate, SLAUpdate } from '../api/slaTracking';
+export { SLAStatus } from '../api/slaTracking';
+export type { TagStatistics } from '../api/tags';
 

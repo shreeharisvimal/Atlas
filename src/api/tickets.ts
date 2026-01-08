@@ -9,6 +9,9 @@ export interface TicketFilters {
   project_id?: number;
   tag_id?: number;
   search?: string;
+  created_by_id?: number;
+  created_from?: string; // YYYY-MM-DD
+  created_to?: string; // YYYY-MM-DD
   skip?: number;
   limit?: number;
 }
@@ -30,6 +33,9 @@ export const ticketsApi = {
     if (filters.project_id) params.append('project_id', filters.project_id.toString());
     if (filters.tag_id) params.append('tag_id', filters.tag_id.toString());
     if (filters.search) params.append('search', filters.search);
+    if (filters.created_by_id) params.append('created_by_id', filters.created_by_id.toString());
+    if (filters.created_from) params.append('created_from', filters.created_from);
+    if (filters.created_to) params.append('created_to', filters.created_to);
     if (filters.skip !== undefined) params.append('skip', filters.skip.toString());
     if (filters.limit !== undefined) params.append('limit', filters.limit.toString());
 
@@ -78,6 +84,33 @@ export const ticketsApi = {
 
   cloneTicket: async (id: number): Promise<Ticket> => {
     const response = await apiClient.post<Ticket>(`/api/v1/tickets/${id}/clone`);
+    return response.data;
+  },
+
+  bulkUpdate: async (ticketIds: number[], updates: {
+    status?: string;
+    priority?: string;
+    assigned_to_id?: number | null;
+    project_id?: number | null;
+  }): Promise<{ updated_count: number; total_count: number; errors?: string[] }> => {
+    const payload: any = { ticket_ids: ticketIds };
+    if (updates.status) payload.status = updates.status;
+    if (updates.priority) payload.priority = updates.priority;
+    if (updates.assigned_to_id !== undefined) payload.assigned_to_id = updates.assigned_to_id === null ? 0 : updates.assigned_to_id;
+    if (updates.project_id !== undefined) payload.project_id = updates.project_id === null ? 0 : updates.project_id;
+    
+    const response = await apiClient.patch<{ updated_count: number; total_count: number; errors?: string[] }>(
+      '/api/v1/tickets/bulk-update',
+      payload
+    );
+    return response.data;
+  },
+
+  bulkDelete: async (ticketIds: number[]): Promise<{ deleted_count: number; total_count: number }> => {
+    const response = await apiClient.delete<{ deleted_count: number; total_count: number }>(
+      '/api/v1/tickets/bulk-delete',
+      { data: { ticket_ids: ticketIds } }
+    );
     return response.data;
   },
 };

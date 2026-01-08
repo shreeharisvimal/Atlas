@@ -5,6 +5,8 @@ import { analyticsApi, type DashboardAnalytics } from '../api/analytics';
 import { DashboardSkeleton } from '../components/LoadingSpinner';
 import type { Ticket, TicketStatus, Priority } from '../types';
 import { format } from 'date-fns';
+import { PAGINATION_CONFIG, TOKEN_CONFIG } from '../config/constants';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 export const Dashboard = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -29,7 +31,7 @@ export const Dashboard = () => {
     }
     
     const parts = token.trim().split('.');
-    if (parts.length !== 3) {
+    if (parts.length !== TOKEN_CONFIG.JWT_PARTS_COUNT) {
       console.error('Invalid token format');
       setLoading(false);
       return;
@@ -38,9 +40,9 @@ export const Dashboard = () => {
     try {
       setLoading(true);
       const [ticketsData, analyticsData] = await Promise.all([
-        ticketsApi.getTickets({ limit: 10 }).catch((err) => {
+        ticketsApi.getTickets({ limit: PAGINATION_CONFIG.DASHBOARD_TICKET_LIMIT }).catch((err) => {
           console.error('Failed to load tickets:', err);
-          return { items: [], total: 0, skip: 0, limit: 10 };
+          return { items: [], total: 0, skip: 0, limit: PAGINATION_CONFIG.DASHBOARD_TICKET_LIMIT };
         }),
         analyticsApi.getDashboardAnalytics().catch((err) => {
           console.error('Failed to load analytics:', err);
@@ -62,8 +64,9 @@ export const Dashboard = () => {
       setTickets(ticketsData.items);
       setAnalytics(analyticsData);
       setError(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      extractErrorMessage(error, 'Failed to load dashboard data');
       // Set default values on error
       setTickets([]);
       setAnalytics({
@@ -80,7 +83,8 @@ export const Dashboard = () => {
       });
       
       // Set user-friendly error message
-      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      const err = error as { code?: string; message?: string };
+      if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
         setError('Unable to connect to the server. Please ensure the backend server is running.');
       } else {
         setError('Failed to load dashboard data. Please try again later.');

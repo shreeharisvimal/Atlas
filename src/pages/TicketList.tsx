@@ -2,12 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ticketsApi } from '../api/tickets';
 import { tagsApi } from '../api/tags';
+import { usersApi } from '../api/users';
+import { savedFiltersApi, type SavedFilter } from '../api/savedFilters';
 import { useToastStore } from '../store/toast';
+import { useAuthStore } from '../store/auth';
 import apiClient from '../api/client';
 import { TicketListSkeleton } from '../components/LoadingSpinner';
 import { Avatar } from '../components/Avatar';
-import type { Ticket, TicketStatus, Priority, Tag } from '../types';
+import type { Ticket, TicketStatus, Priority, Tag, User } from '../types';
 import { format } from 'date-fns';
+import { PAGINATION_CONFIG, DEBOUNCE_CONFIG, UI_CONFIG } from '../config/constants';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -28,10 +33,11 @@ function useDebounce<T>(value: T, delay: number): T {
 export const TicketList = () => {
   const navigate = useNavigate();
   const { showToast } = useToastStore();
+  const { user: currentUser } = useAuthStore();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(PAGINATION_CONFIG.DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState({
@@ -40,13 +46,24 @@ export const TicketList = () => {
     issue_type: '',
     tag_id: '',
     search: '',
+    created_by_id: '',
+    created_from: '',
+    created_to: '',
   });
   const [statuses, setStatuses] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<string[]>([]);
   const [issueTypes, setIssueTypes] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [selectedTickets, setSelectedTickets] = useState<Set<number>>(new Set());
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showSaveFilterModal, setShowSaveFilterModal] = useState(false);
+  const [saveFilterName, setSaveFilterName] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebounce(searchInput, 500);
+  const debouncedSearch = useDebounce(searchInput, DEBOUNCE_CONFIG.SEARCH_DELAY);
 
   useEffect(() => {
     loadDropdowns();
@@ -63,19 +80,68 @@ export const TicketList = () => {
 
   const loadDropdowns = async () => {
     try {
-      const [statusData, priorityData, typeData, tagsData] = await Promise.all([
+      // Use Promise.allSettled to handle individual failures gracefully
+      const results = await Promise.allSettled([
         ticketsApi.getStatuses(),
         ticketsApi.getPriorities(),
         ticketsApi.getIssueTypes(),
         tagsApi.getTags(),
+        usersApi.getUsersDropdown(),
+        savedFiltersApi.getSavedFilters(true),
       ]);
-      setStatuses(statusData || []);
-      setPriorities(priorityData || []);
-      setIssueTypes(typeData || []);
-      setTags(tagsData || []);
+      
+      // Process results individually
+      const [statusResult, priorityResult, typeResult, tagsResult, usersResult, savedFiltersResult] = results;
+      
+      if (statusResult.status === 'fulfilled') {
+        setStatuses(statusResult.value || []);
+      } else {
+        console.error('Failed to load statuses:', statusResult.reason);
+      }
+      
+      if (priorityResult.status === 'fulfilled') {
+        setPriorities(priorityResult.value || []);
+      } else {
+        console.error('Failed to load priorities:', priorityResult.reason);
+      }
+      
+      if (typeResult.status === 'fulfilled') {
+        setIssueTypes(typeResult.value || []);
+      } else {
+        console.error('Failed to load issue types:', typeResult.reason);
+      }
+      
+      if (tagsResult.status === 'fulfilled') {
+        setTags(tagsResult.value || []);
+      } else {
+        console.error('Failed to load tags:', tagsResult.reason);
+        // Only show toast for critical failures, not for optional data
+      }
+      
+      if (usersResult.status === 'fulfilled') {
+        setUsers(usersResult.value || []);
+      } else {
+        console.error('Failed to load users:', usersResult.reason);
+      }
+      
+      if (savedFiltersResult.status === 'fulfilled') {
+        setSavedFilters(savedFiltersResult.value || []);
+      } else {
+        console.error('Failed to load saved filters:', savedFiltersResult.reason);
+        // Saved filters are optional, don't show error
+      }
+      
+      // Only show a general error if multiple critical endpoints failed
+      const criticalFailures = [statusResult, priorityResult, typeResult].filter(r => r.status === 'rejected');
+      if (criticalFailures.length > 0) {
+        const errorMessage = extractErrorMessage(criticalFailures[0].reason, 'Failed to load some filter options');
+        showToast(errorMessage, 'error');
+      }
     } catch (error) {
-      console.error('Failed to load dropdowns:', error);
-      showToast('Failed to load filter options. Please refresh the page.', 'error');
+      // Fallback for unexpected errors
+      console.error('Unexpected error loading dropdowns:', error);
+      const errorMessage = extractErrorMessage(error, 'Failed to load filter options. Please refresh the page.');
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -86,13 +152,19 @@ export const TicketList = () => {
       const data = await ticketsApi.getTickets({
         ...filters,
         tag_id: filters.tag_id ? Number(filters.tag_id) : undefined,
+        created_by_id: filters.created_by_id ? Number(filters.created_by_id) : undefined,
+        created_from: filters.created_from || undefined,
+        created_to: filters.created_to || undefined,
         skip,
         limit: pageSize,
       });
       setTickets(data.items);
       setTotal(data.total);
+      setSelectedTickets(new Set()); // Clear selection when filters change
     } catch (error) {
       console.error('Failed to load tickets:', error);
+      const errorMessage = extractErrorMessage(error, 'Failed to load tickets');
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -145,13 +217,116 @@ export const TicketList = () => {
       showToast('Tickets exported successfully', 'success');
     } catch (error) {
       console.error('Failed to export tickets:', error);
-      showToast('Failed to export tickets', 'error');
+      const errorMessage = extractErrorMessage(error, 'Failed to export tickets');
+      showToast(errorMessage, 'error');
     } finally {
       setExporting(false);
     }
   };
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== '').length;
+  const canPerformBulkActions = currentUser?.system_role === 'ADMIN' || currentUser?.system_role === 'MANAGER';
+
+  const handleSelectTicket = (ticketId: number, checked: boolean) => {
+    setSelectedTickets((prev) => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(ticketId);
+      } else {
+        newSet.delete(ticketId);
+      }
+      setShowBulkActions(newSet.size > 0);
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedTickets(new Set(tickets.map(t => t.id)));
+      setShowBulkActions(true);
+    } else {
+      setSelectedTickets(new Set());
+      setShowBulkActions(false);
+    }
+  };
+
+  const handleBulkUpdate = async (updates: { status?: string; priority?: string; assigned_to_id?: number | null; project_id?: number | null }) => {
+    if (selectedTickets.size === 0) return;
+    try {
+      setBulkActionLoading(true);
+      const result = await ticketsApi.bulkUpdate(Array.from(selectedTickets), updates);
+      showToast(`Successfully updated ${result.updated_count} ticket(s)`, 'success');
+      if (result.errors && result.errors.length > 0) {
+        showToast(`Some errors occurred: ${result.errors.join(', ')}`, 'warning');
+      }
+      setSelectedTickets(new Set());
+      setShowBulkActions(false);
+      loadTickets();
+    } catch (error) {
+      console.error('Failed to bulk update tickets:', error);
+      showToast(extractErrorMessage(error, 'Failed to update tickets'), 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTickets.size === 0 || !confirm(`Are you sure you want to delete ${selectedTickets.size} ticket(s)?`)) return;
+    try {
+      setBulkActionLoading(true);
+      const result = await ticketsApi.bulkDelete(Array.from(selectedTickets));
+      showToast(`Successfully deleted ${result.deleted_count} ticket(s)`, 'success');
+      setSelectedTickets(new Set());
+      setShowBulkActions(false);
+      loadTickets();
+    } catch (error) {
+      console.error('Failed to bulk delete tickets:', error);
+      showToast(extractErrorMessage(error, 'Failed to delete tickets'), 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleLoadSavedFilter = (savedFilter: SavedFilter) => {
+    setFilters({
+      status: savedFilter.filters.status || '',
+      priority: savedFilter.filters.priority || '',
+      issue_type: savedFilter.filters.issue_type || '',
+      tag_id: savedFilter.filters.tag_id || '',
+      search: savedFilter.filters.search || '',
+      created_by_id: '',
+      created_from: '',
+      created_to: '',
+    });
+    setSearchInput(savedFilter.filters.search || '');
+    setCurrentPage(1);
+  };
+
+  const handleSaveFilter = async () => {
+    if (!saveFilterName.trim()) {
+      showToast('Please enter a filter name', 'error');
+      return;
+    }
+    try {
+      await savedFiltersApi.createSavedFilter({
+        name: saveFilterName.trim(),
+        filters: {
+          status: filters.status || undefined,
+          priority: filters.priority || undefined,
+          issue_type: filters.issue_type || undefined,
+          tag_id: filters.tag_id || undefined,
+          search: filters.search || undefined,
+        },
+      });
+      showToast('Filter saved successfully', 'success');
+      setShowSaveFilterModal(false);
+      setSaveFilterName('');
+      loadDropdowns();
+    } catch (error) {
+      console.error('Failed to save filter:', error);
+      showToast(extractErrorMessage(error, 'Failed to save filter'), 'error');
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-8">
@@ -215,14 +390,55 @@ export const TicketList = () => {
               </span>
             )}
           </h2>
-          {activeFiltersCount > 0 && (
+          <div className="flex items-center gap-3">
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={() => {
+                  setFilters({ status: '', priority: '', issue_type: '', tag_id: '', search: '', created_by_id: '', created_from: '', created_to: '' });
+                  setSearchInput('');
+                }}
+                className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+              >
+                Clear all
+              </button>
+            )}
             <button
-              onClick={() => setFilters({ status: '', priority: '', issue_type: '', tag_id: '', search: '' })}
-              className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+              onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+              className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors flex items-center gap-1"
             >
-              Clear all
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              </svg>
+              {showAdvancedSearch ? 'Hide' : 'Advanced'} Search
             </button>
-          )}
+            <div className="relative">
+              <button
+                onClick={() => setShowSaveFilterModal(true)}
+                className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                Save Filter
+              </button>
+              {savedFilters.length > 0 && (
+                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10 max-h-96 overflow-y-auto">
+                  <div className="p-2">
+                    <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 px-2 py-1 mb-1">Saved Filters</div>
+                    {savedFilters.map((filter) => (
+                      <button
+                        key={filter.id}
+                        onClick={() => handleLoadSavedFilter(filter)}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                      >
+                        {filter.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="md:col-span-2">
@@ -311,7 +527,165 @@ export const TicketList = () => {
             ))}
           </select>
         </div>
+        {showAdvancedSearch && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Created By
+              </label>
+              <select
+                value={filters.created_by_id}
+                onChange={(e) => setFilters({ ...filters, created_by_id: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200 cursor-pointer"
+              >
+                <option value="">All Creators</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Created From
+              </label>
+              <input
+                type="date"
+                value={filters.created_from}
+                onChange={(e) => setFilters({ ...filters, created_from: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Created To
+              </label>
+              <input
+                type="date"
+                value={filters.created_to}
+                onChange={(e) => setFilters({ ...filters, created_to: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all duration-200"
+              />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Bulk Actions Toolbar */}
+      {showBulkActions && canPerformBulkActions && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-primary-700 dark:text-primary-300">
+              {selectedTickets.size} ticket(s) selected
+            </span>
+            <button
+              onClick={() => {
+                setSelectedTickets(new Set());
+                setShowBulkActions(false);
+              }}
+              className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+            >
+              Clear selection
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBulkUpdate({ status: e.target.value });
+                  e.target.value = '';
+                }
+              }}
+              disabled={bulkActionLoading}
+              className="px-3 py-2 border border-primary-300 dark:border-primary-700 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
+            >
+              <option value="">Change Status...</option>
+              {statuses.map((status) => (
+                <option key={status} value={status}>
+                  {status.replace('_', ' ')}
+                </option>
+              ))}
+            </select>
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBulkUpdate({ priority: e.target.value });
+                  e.target.value = '';
+                }
+              }}
+              disabled={bulkActionLoading}
+              className="px-3 py-2 border border-primary-300 dark:border-primary-700 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
+            >
+              <option value="">Change Priority...</option>
+              {priorities.map((priority) => (
+                <option key={priority} value={priority}>
+                  {priority}
+                </option>
+              ))}
+            </select>
+            <select
+              onChange={(e) => {
+                const userId = e.target.value ? Number(e.target.value) : null;
+                if (userId !== null || e.target.value === 'unassign') {
+                  handleBulkUpdate({ assigned_to_id: e.target.value === 'unassign' ? null : userId });
+                  e.target.value = '';
+                }
+              }}
+              disabled={bulkActionLoading}
+              className="px-3 py-2 border border-primary-300 dark:border-primary-700 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
+            >
+              <option value="">Assign To...</option>
+              <option value="unassign">Unassign</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkActionLoading}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Save Filter Modal */}
+      {showSaveFilterModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Save Filter</h3>
+            <input
+              type="text"
+              value={saveFilterName}
+              onChange={(e) => setSaveFilterName(e.target.value)}
+              placeholder="Filter name"
+              className="w-full px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-white mb-4"
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowSaveFilterModal(false);
+                  setSaveFilterName('');
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveFilter}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content Section */}
       {loading ? (
@@ -350,6 +724,17 @@ export const TicketList = () => {
               <table className="min-w-full divide-y divide-gray-200/50 dark:divide-gray-700/50">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-700/50 dark:to-gray-800/50">
                   <tr>
+                    {canPerformBulkActions && (
+                      <th className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedTickets.size === tickets.length && tickets.length > 0}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                      </th>
+                    )}
                     {['ID', 'Title', 'Tags', 'Type', 'Priority', 'Status', 'Assigned To', 'Created'].map((header) => (
                       <th
                         key={header}
@@ -365,9 +750,19 @@ export const TicketList = () => {
                     <tr
                       key={ticket.id}
                       onClick={() => navigate(`/tickets/${ticket.id}`)}
-                      className="group hover:bg-gradient-to-r hover:from-primary-50/30 hover:to-transparent dark:hover:from-primary-900/10 transition-all duration-300 cursor-pointer"
-                      style={{ animationDelay: `${index * 30}ms` }}
+                      className={`group hover:bg-gradient-to-r hover:from-primary-50/30 hover:to-transparent dark:hover:from-primary-900/10 transition-all duration-300 cursor-pointer ${selectedTickets.has(ticket.id) ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
+                      style={{ animationDelay: `${index * UI_CONFIG.ANIMATION_DELAY_BASE}ms` }}
                     >
+                      {canPerformBulkActions && (
+                        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedTickets.has(ticket.id)}
+                            onChange={(e) => handleSelectTicket(ticket.id, e.target.checked)}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/tickets/${ticket.id}`}

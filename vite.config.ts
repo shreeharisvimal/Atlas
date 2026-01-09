@@ -29,59 +29,8 @@ export default defineConfig({
           }
           return 'assets/[name].[hash][extname]';
         },
-        // Manual chunk splitting for better code splitting
-        manualChunks: (id) => {
-          // Vendor chunks
-          if (id.includes('node_modules')) {
-            // CRITICAL: React and all React-related packages MUST be in the same chunk
-            // This ensures React is available to all React dependencies
-            // Include ALL markdown-related packages here since react-markdown needs React
-            // Also include any package that might use React hooks
-            if (
-              id.includes('react') || 
-              id.includes('react-dom') ||
-              id.includes('react-router') ||
-              id.includes('react-markdown') ||
-              id.includes('remark') ||
-              id.includes('unified') ||
-              id.includes('micromark') ||
-              id.includes('scheduler') ||
-              id.includes('decode-named-character-reference') ||
-              id.includes('character-entities') ||
-              id.includes('mdast') ||
-              id.includes('hast') ||
-              id.includes('zwitch') ||
-              id.includes('bail') ||
-              id.includes('extend') ||
-              id.includes('longest-streak') ||
-              id.includes('vfile') ||
-              id.includes('unist-util')
-            ) {
-              return 'vendor-react';
-            }
-            // Axios in separate chunk
-            if (id.includes('axios')) {
-              return 'vendor-axios';
-            }
-            // Date utilities in separate chunk
-            if (id.includes('date-fns')) {
-              return 'vendor-date';
-            }
-            // Zustand in separate chunk
-            if (id.includes('zustand')) {
-              return 'vendor-state';
-            }
-            // All other node_modules
-            return 'vendor';
-          }
-          // Split large page components into their own chunks
-          if (id.includes('/pages/')) {
-            const pageName = id.split('/pages/')[1]?.split('.')[0];
-            if (pageName) {
-              return `page-${pageName}`;
-            }
-          }
-        },
+        // Use Vite/Rollup's default chunking strategy to avoid any potential
+        // issues with manual chunk ordering / execution in production.
       },
     },
     // Enable source maps for production debugging (optional)

@@ -11,6 +11,7 @@ import { useToastStore } from './store/toast';
 
 // Lazy load all page components for code splitting
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(module => ({ default: module.ForgotPassword })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const TicketList = lazy(() => import('./pages/TicketList').then(module => ({ default: module.TicketList })));
 const TicketDetail = lazy(() => import('./pages/TicketDetail').then(module => ({ default: module.TicketDetail })));
@@ -55,6 +56,10 @@ function App() {
               <Route
                 path="/login"
                 element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
+              />
+              <Route
+                path="/forgot-password"
+                element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <ForgotPassword />}
               />
               <Route
                 path="/"

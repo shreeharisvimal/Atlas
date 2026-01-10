@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
@@ -9,6 +10,7 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { login } = useAuth();
+  const navigate = useNavigate();
 
   // Clear any errors and stale tokens when component mounts
   useEffect(() => {
@@ -286,6 +288,16 @@ export const Login = () => {
                     </p>
                   )}
                 </div>
+              </div>
+
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors duration-200"
+                >
+                  Forgot password?
+                </button>
               </div>
 
               <div className="pt-2">

@@ -1,15 +1,30 @@
 import apiClient from './client';
 import type { User } from '../types';
 
+export interface UsersResponse {
+  items: User[];
+  total: number;
+  skip: number;
+  limit: number;
+  page?: number;
+  total_pages?: number;
+  has_next?: boolean;
+  has_prev?: boolean;
+}
+
 export const usersApi = {
   getUsers: async (): Promise<User[]> => {
-    const response = await apiClient.get<User[]>('/api/v1/users/');
+    const response = await apiClient.get<UsersResponse>('/api/v1/users/');
     const data = response.data;
-    // Ensure we always return an array, even if API returns unexpected structure
+    // Handle paginated response with items property
+    if (data && typeof data === 'object' && 'items' in data && Array.isArray(data.items)) {
+      return data.items;
+    }
+    // Fallback: if it's already an array, return it directly
     if (Array.isArray(data)) {
       return data;
     }
-    // Handle cases where API might return { data: [...] } or { users: [...] }
+    // Handle other possible structures
     if (data && typeof data === 'object') {
       const usersArray = (data as any).data || (data as any).users;
       return Array.isArray(usersArray) ? usersArray : [];

@@ -4,7 +4,17 @@ import type { User } from '../types';
 export const usersApi = {
   getUsers: async (): Promise<User[]> => {
     const response = await apiClient.get<User[]>('/api/v1/users/');
-    return response.data;
+    const data = response.data;
+    // Ensure we always return an array, even if API returns unexpected structure
+    if (Array.isArray(data)) {
+      return data;
+    }
+    // Handle cases where API might return { data: [...] } or { users: [...] }
+    if (data && typeof data === 'object') {
+      const usersArray = (data as any).data || (data as any).users;
+      return Array.isArray(usersArray) ? usersArray : [];
+    }
+    return [];
   },
 
   getUser: async (id: number): Promise<User> => {

@@ -17,9 +17,19 @@ export const Users = () => {
   const loadUsers = async () => {
     try {
       const data = await usersApi.getUsers();
-      setUsers(data);
+      // Ensure data is always an array, even if API returns unexpected structure
+      if (Array.isArray(data)) {
+        setUsers(data);
+      } else if (data && typeof data === 'object') {
+        // Handle cases where API might return { data: [...] } or { users: [...] }
+        const usersArray = (data as any).data || (data as any).users || [];
+        setUsers(Array.isArray(usersArray) ? usersArray : []);
+      } else {
+        setUsers([]);
+      }
     } catch (error) {
       console.error('Failed to load users:', error);
+      setUsers([]); // Ensure users is always an array even on error
     } finally {
       setLoading(false);
     }
@@ -65,7 +75,8 @@ export const Users = () => {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800">
-            {users.map((user, index) => {
+            {Array.isArray(users) && users.length > 0 ? (
+              users.map((user, index) => {
               const isViewer = user.system_role === SystemRole.VIEWER;
               const isLastRow = index === users.length - 1;
               const showBorder = !isViewer && !isLastRow;
@@ -129,7 +140,14 @@ export const Users = () => {
                 </td>
               </tr>
               );
-            })}
+              })
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No users found
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

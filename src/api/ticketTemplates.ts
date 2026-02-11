@@ -48,7 +48,7 @@ export const ticketTemplatesApi = {
   },
 
   createTemplate: async (template: TicketTemplateCreate): Promise<TicketTemplate> => {
-    const response = await apiClient.post<TicketTemplate>('/api/v1/ticket-templates', template);
+    const response = await apiClient.post<TicketTemplate>('/api/v1/ticket-templates/', template);
     return response.data;
   },
 
@@ -66,6 +66,7 @@ export const ticketTemplatesApi = {
     return response.data;
   },
 };
+
 
 
 

@@ -34,7 +34,7 @@ export const sprintsApi = {
     end_date?: string;
     goal?: string;
   }): Promise<Sprint> => {
-    const response = await apiClient.post<Sprint>('/api/v1/sprints', data);
+    const response = await apiClient.post<Sprint>('/api/v1/sprints/', data);
     return response.data;
   },
 
@@ -63,6 +63,7 @@ export const sprintsApi = {
     await apiClient.delete(`/api/v1/sprints/${sprintId}/tickets/${ticketId}`);
   },
 };
+
 
 
 

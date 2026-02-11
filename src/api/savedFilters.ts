@@ -59,7 +59,7 @@ export const savedFiltersApi = {
   },
 
   createSavedFilter: async (filter: SavedFilterCreate): Promise<SavedFilter> => {
-    const response = await apiClient.post<SavedFilter>('/api/v1/saved-filters', filter);
+    const response = await apiClient.post<SavedFilter>('/api/v1/saved-filters/', filter);
     return response.data;
   },
 

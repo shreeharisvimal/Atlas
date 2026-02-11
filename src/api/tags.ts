@@ -8,7 +8,7 @@ export const tagsApi = {
   },
 
   createTag: async (tag: { name: string; color?: string }): Promise<Tag> => {
-    const response = await apiClient.post<Tag>('/api/v1/tags', tag);
+    const response = await apiClient.post<Tag>('/api/v1/tags/', tag);
     return response.data;
   },
 

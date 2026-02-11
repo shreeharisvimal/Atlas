@@ -8,10 +8,11 @@ export const commentsApi = {
   },
 
   createComment: async (data: CommentCreate): Promise<Comment> => {
-    const response = await apiClient.post<Comment>('/api/v1/comments', data);
+    const response = await apiClient.post<Comment>('/api/v1/comments/', data);
     return response.data;
   },
 };
+
 
 
 

@@ -28,7 +28,7 @@ export const projectsApi = {
   },
 
   createProject: async (data: ProjectCreate): Promise<Project> => {
-    const response = await apiClient.post<Project>('/api/v1/projects', data);
+    const response = await apiClient.post<Project>('/api/v1/projects/', data);
     return response.data;
   },
 

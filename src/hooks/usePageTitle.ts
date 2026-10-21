@@ -17,7 +17,7 @@ export const usePageTitle = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const baseTitle = 'SETU AI Atlas';
+    const baseTitle = 'Shree Atlas';
     
     // Get the page name from the route
     let pageName = 'Dashboard'; // default

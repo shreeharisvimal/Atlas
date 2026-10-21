@@ -81,7 +81,7 @@ export const ForgotPassword = () => {
           <div className="flex items-center space-x-3 mb-12">
             <img 
               src={import.meta.env.VITE_BASE_PATH ? `${import.meta.env.VITE_BASE_PATH}logo-icon.svg` : '/logo-icon.svg'} 
-              alt="SETU AI Atlas Logo" 
+              alt="Shree Atlas Logo" 
               className="w-10 h-10 flex-shrink-0"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
@@ -89,7 +89,7 @@ export const ForgotPassword = () => {
               }}
             />
             <div>
-              <h1 className="text-xl font-bold text-white">SETU AI Atlas</h1>
+              <h1 className="text-xl font-bold text-white">Shree Atlas</h1>
               <p className="text-xs text-white/80">Enterprise Platform</p>
             </div>
           </div>
@@ -127,7 +127,7 @@ export const ForgotPassword = () => {
             <div className="flex items-center justify-center space-x-3 mb-4">
               <img 
                 src={import.meta.env.VITE_BASE_PATH ? `${import.meta.env.VITE_BASE_PATH}logo-icon.svg` : '/logo-icon.svg'} 
-                alt="SETU AI Atlas Logo" 
+                alt="Shree Atlas Logo" 
                 className="w-10 h-10 flex-shrink-0"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -135,7 +135,7 @@ export const ForgotPassword = () => {
                 }}
               />
               <div className="text-left">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">SETU AI Atlas</h1>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Shree Atlas</h1>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Enterprise Platform</p>
               </div>
             </div>
@@ -300,7 +300,7 @@ export const ForgotPassword = () => {
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              © {new Date().getFullYear()} SETU AI Atlas. All rights reserved.
+              © {new Date().getFullYear()} Shree Atlas. All rights reserved.
             </p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
               Enterprise Issue Tracking System

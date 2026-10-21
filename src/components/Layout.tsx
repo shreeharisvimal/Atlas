@@ -365,7 +365,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 <div className="flex items-center space-x-2">
                   <img 
                     src={import.meta.env.VITE_BASE_PATH ? `${import.meta.env.VITE_BASE_PATH}logo-icon.svg` : '/logo-icon.svg'} 
-                    alt="SETU AI Atlas Logo" 
+                    alt="Shree Atlas Logo" 
                     className="w-8 h-8 flex-shrink-0"
                     onError={(e) => {
                       // Fallback if logo fails to load
@@ -375,7 +375,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   />
                   <div className="hidden sm:block">
                     <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                      SETU AI Atlas
+                      Shree Atlas
                     </h1>
                   </div>
                 </div>
